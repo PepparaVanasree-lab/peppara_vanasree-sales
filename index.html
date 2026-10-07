@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Vanasree Eco Shop Web App</title>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <!-- Google Fonts: Anek Malayalam -->
+  <link href="https://fonts.googleapis.com/css2?family=Anek+Malayalam:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Anek Malayalam', Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 0; }
+    .login-container { width: 90%; max-width: 340px; background: #fff; padding: 30px; margin: 10vh auto; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+    .app-container { display: none; max-width: 1000px; margin: 15px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); min-height: 80vh; box-sizing: border-box; }
+
+    h2 { text-align: center; color: #2E7D32; font-size: 22px; }
+    h3 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; font-size: 18px; }
+    input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 15px; font-family: 'Anek Malayalam', sans-serif; }
+
+    .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+    .tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-weight: bold; background: #eee; font-size: 15px; }
+    .tab.active { background: #2E7D32; color: white; }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; min-width: 400px; font-family: 'Anek Malayalam', sans-serif; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; font-size: 14px; }
+    th { background: #2E7D32; color: white; }
+
+    #adminTable th { background: #E0E0E0; color: #333; border: none; padding: 12px 8px; }
+    #adminTable td { border: none; border-bottom: 1px solid #f0f0f0; padding: 12px 8px; }
+    #adminTable { border: none; }
+
+    .logout-btn { background: #d9534f; color: white; width: auto; float: right; padding: 6px 15px; font-size: 14px; margin-top: -10px; border: none; border-radius: 4px; cursor: pointer; }
+
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; border:1px solid #ddd; margin-top:-10px; float:right; margin-right:10px; user-select:none; }
+    .pill.online { background:#E8F5E9; color:#2E7D32; border-color:#C8E6C9; }
+    .pill.offline { background:#FFEBEE; color:#C62828; border-color:#FFCDD2; }
+    .pill.connecting { background:#FFF3E0; color:#E65100; border-color:#FFE0B2; }
+
+    .menu-btn { color: white; border: none; padding: 15px; font-size: 15px; font-weight: bold; border-radius: 30px; margin: 12px 0; cursor: pointer; text-align: center; display: block; width: 100%; }
+    .btn-manage-inv { background: #FF5722; }
+    .btn-add-sales { background: #4CAF50; }
+    .btn-edit-sales { background: #2196F3; }
+    .btn-gen-pdf { background: #9C27B0; }
+    .menu-btn:hover { opacity: 0.92; }
+
+    .back-btn { background: #607D8B; color: white; width: auto; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 15px; }
+    .save-btn { background: #2E7D32; color: white; font-weight: bold; border: none; cursor: pointer; }
+    .edit-btn { background: #FF9800; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 4px; margin-bottom: 5px; font-size: 13px; }
+    .delete-btn { background: #d9534f; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 4px; font-size: 13px; }
+
+    /* Button feedback states */
+    .btn-saving { background:#607D8B !important; }
+    .btn-success { background:#2E7D32 !important; }
+    .btn-error { background:#d9534f !important; }
+
+    .badge-pending { font-size: 11px; font-weight: 800; color:#E65100; background:#FFF3E0; border:1px solid #FFE0B2; border-radius: 999px; padding: 2px 8px; }
+
+    .sales-subpage { display: none; }
+    .admin-controls input, .admin-controls select { border: none; border-bottom: 2px solid #000; border-radius: 0; padding: 5px; outline: none; font-size: 16px; text-align: center; background: transparent; }
+
+    .flex-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .flex-item { flex: 1; min-width: 100px; }
+
+    @media screen and (max-width: 600px) {
+      .app-container { margin: 10px; padding: 12px; }
+      h2 { font-size: 18px; }
+      .tabs { flex-direction: column; }
+      .tab { border-bottom: 1px solid #ccc; }
+      .admin-controls { flex-direction: column; gap: 10px; }
+      .admin-controls select, .admin-controls input { width: 100% !important; border: 1px solid #ccc; padding: 10px; border-radius: 4px; }
+      .admin-controls button { width: 100% !important; margin-top: 5px; }
+      .menu-btn { font-size: 14px; padding: 12px; }
+      th, td { font-size: 13px; padding: 8px 5px; }
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      background: #333; color: #fff; padding: 10px 16px; border-radius: 999px;
+      display: none; z-index: 9999; font-size: 14px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+      max-width: 92vw; text-align:center;
+    }
+    #toast.success { background:#2E7D32; }
+    #toast.error { background:#C62828; }
+    #toast.info { background:#333; }
+
+    /* Print Base (mode-specific @page injected by JS) */
+    #printArea { display: none; }
+    @media print {
+      body * { visibility: hidden; }
+      body { background: white; margin: 0; padding: 0; }
+      #printArea, #printArea * { visibility: visible; font-family: 'Anek Malayalam', sans-serif; }
+      #printArea { display: block; position: absolute; left: 0; top: 0; width: 100%; }
+      .no-print { display: none !important; }
+      .print-table { width: 100%; border-collapse: collapse; }
+      .print-table th, .print-table td { border: 1px solid #000; text-align: center; }
+      .rotate-text { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Toast -->
+  <div id="toast"></div>
+
+  <!-- Login Page -->
+  <div id="loginSection" class="login-container">
+    <h2>Vanasree Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <label style="display:block; margin-top:10px;">
+      <input type="checkbox" id="rememberMe"> Remember username & password
+    </label>
+    <button onclick="handleLogin()" style="background:#2E7D32; color:white; border:none; font-weight:bold; margin-top:20px;">LOGIN</button>
+    <p id="loginError" style="color:red; text-align:center; display:none; margin-top:10px;">Invalid Credentials!</p>
+    <p style="font-size:12px; color:#666; text-align:center; margin-top:10px;">
+      First-time default: <b>admin / admin123</b> (password can be changed after login)
+    </p>
+  </div>
+
+  <!-- Main App Page -->
+  <div id="appSection" class="app-container" style="padding: 0;">
+    <div style="padding: 15px; padding-bottom: 0;">
+      <button class="logout-btn" onclick="handleLogout()">Logout</button>
+      <button class="logout-btn" style="background:#FF9800; margin-right:10px;" onclick="changePasswordPrompt()">Change Password</button>
+      <span id="netStatus" class="pill connecting">Connecting...</span>
+
+      <div class="tabs" style="margin-top: 25px;">
+        <div class="tab active" onclick="switchTab('salesTab')">Daily Sales</div>
+        <div class="tab" onclick="switchTab('adminTab')">Cash Book</div>
+      </div>
+    </div>
+
+    <!-- DAILY SALES TAB -->
+    <div id="salesTab" class="section active" style="padding: 15px;">
+      <h2 style="margin-bottom: 25px;">VANASREE, PEPPARA</h2>
+
+      <div id="salesMainMenu">
+        <button class="menu-btn btn-manage-inv" onclick="showSalesSubPage('manageInvPage')">MANAGE INVENTORY (Add/Edit/Return/Delete)</button>
+        <button class="menu-btn btn-add-sales" onclick="showSalesSubPage('addSalesPage')">ADD SALES DETAILS</button>
+        <button class="menu-btn btn-edit-sales" onclick="showSalesSubPage('editSalesPage')">VIEW / EDIT SALES DETAILS</button>
+        <button class="menu-btn btn-gen-pdf" onclick="showSalesSubPage('genPdfPage')">GENERATE MONTHLY PDF</button>
+      </div>
+
+      <!-- Manage Inventory Subpage -->
+      <div id="manageInvPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">🔙 Back to Menu</button>
+
+        <div style="background:#e8f5e9; padding:15px; border-radius:5px; margin-bottom:20px;">
+          <h3 style="margin-top:0; border:none; color:#2E7D32;">Add New Item</h3>
+          <div class="flex-row">
+            <input type="text" id="invNewName" placeholder="Item Name" class="flex-item" style="flex:2; min-width:150px;">
+            <input type="number" id="invNewStock" placeholder="Stock" class="flex-item">
+            <input type="number" id="invNewMrp" placeholder="MRP (₹)" class="flex-item">
+            <button class="save-btn flex-item" onclick="addNewInvItem()">ADD</button>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+          <button id="importBtn" onclick="bulkImportItems()" style="background:#FFC107; color:#000; font-weight:bold; padding:12px; border:none; border-radius:5px; flex:1; cursor:pointer; font-size:14px; display:none;">
+            ⚡ IMPORT ALL ITEMS
+          </button>
+          <button onclick="returnStockPrompt()" style="background:#d9534f; color:#fff; font-weight:bold; padding:12px; border:none; border-radius:5px; flex:1; cursor:pointer; font-size:14px;">
+            🔄 RETURN STOCK
+          </button>
+        </div>
+
+        <h3 style="margin-bottom: 10px;">Available Items in Stock</h3>
+        <input type="text" id="searchItem" placeholder="Search items..." onkeyup="filterItems()" style="margin-bottom: 10px;">
+        <div class="table-responsive">
+          <table id="invTable">
+            <thead><tr><th>Item Name</th><th>Stock</th><th>MRP (₹)</th><th>Action</th></tr></thead>
+            <tbody id="inventoryListBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Add Sales Subpage -->
+      <div id="addSalesPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">🔙 Back to Menu</button>
+        <h3>New Bill Entry</h3>
+        <label>Date:</label>
+        <input type="date" id="saleDate">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; margin-bottom:5px;">
+          <label style="margin:0; font-weight:bold; color:#333;">Select Item:</label>
+          <span id="lblSalesAvailableStock" style="color:#E65100; font-weight:bold; font-size:14px; background:#FFF3E0; padding:4px 10px; border-radius:4px; border:1px solid #FFE0B2;">Stock: 0</span>
+        </div>
+        <select id="salesItemSelect" onchange="updateSalesStockDetails()" style="margin-top: 0;"></select>
+
+        <label style="margin-top:10px; display:block; font-weight:bold; color:#333;">Quantity:</label>
+        <input type="number" id="saleQty" placeholder="Enter Qty" oninput="calculateTotalAmount()">
+
+        <h3 style="text-align:center; background:#E8F5E9; padding:15px; border-radius:5px; margin-top:15px;">
+          Total Amount: <span id="saleTotalAmt" style="color:#2E7D32;">₹ 0</span>
+        </h3>
+
+        <button id="btnSaveBill" class="save-btn" style="padding:15px; font-size:16px;" onclick="saveBill(this)">SAVE BILL</button>
+
+        <p style="text-align:center; font-size:12px; color:#777; margin-top:8px;">
+          Offline ആയാലും SAVE ചെയ്യാം — app close ചെയ്താലും pending data നഷ്ടമാകില്ല.
+        </p>
+      </div>
+
+      <!-- Edit Sales Subpage -->
+      <div id="editSalesPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">🔙 Back to Menu</button>
+        <h3>View / Edit Sales</h3>
+        <div class="flex-row">
+          <input type="date" id="filterSaleDate" onchange="loadSalesList()" class="flex-item" style="flex: 2;">
+          <button class="save-btn flex-item" style="background: #2196F3;" onclick="loadSalesList()">LOAD</button>
+        </div>
+        <div class="table-responsive" style="margin-top: 15px;">
+          <table id="salesTable">
+            <thead><tr><th>Item Name</th><th>Qty</th><th>Amount</th><th>Action</th></tr></thead>
+            <tbody id="salesListBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Generate PDF Subpage -->
+      <div id="genPdfPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">🔙 Back to Menu</button>
+        <h3>Generate Monthly PDF Register</h3>
+        <select id="pdfMonth">
+          <option value="01">01 - January</option><option value="02">02 - February</option><option value="03">03 - March</option>
+          <option value="04">04 - April</option><option value="05">05 - May</option><option value="06">06 - June</option>
+          <option value="07">07 - July</option><option value="08">08 - August</option><option value="09">09 - September</option>
+          <option value="10" selected>10 - October</option><option value="11">11 - November</option><option value="12">12 - December</option>
+        </select>
+        <input type="number" id="pdfYear" value="2026">
+        <button class="menu-btn btn-gen-pdf" onclick="printWebPdf()">GENERATE PDF (Print / Save)</button>
+        <p style="text-align:center; font-size:13px; color:#666;">
+          Tip: Print dialog-ൽ <b>Scale = Fit to page</b> തിരഞ്ഞെടുക്കുക (pages കുറയും).
+        </p>
+      </div>
+    </div>
+
+    <!-- CASH BOOK TAB -->
+    <div id="adminTab" class="section" style="background: #f5f5f5; border-radius: 0 0 8px 8px;">
+      <div style="background: #4CAF50; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px;">
+        VANASREE CASH BOOK
+      </div>
+
+      <div class="admin-controls" style="display:flex; gap:10px; justify-content:center; align-items:center; padding:20px; background:#fff; flex-wrap:wrap;">
+        <select id="adminMonth" style="width:auto; min-width: 80px;">
+          <option value="01">01</option><option value="02">02</option><option value="03">03</option>
+          <option value="04">04</option><option value="05">05</option><option value="06">06</option>
+          <option value="07">07</option><option value="08">08</option><option value="09">09</option>
+          <option value="10" selected>10</option><option value="11">11</option><option value="12">12</option>
+        </select>
+        <input type="number" id="adminYear" value="2026" style="width: 90px;">
+        <button onclick="loadAdminData()" style="width:auto; background:#673AB7; color:white; padding:10px 20px; border-radius:20px; border:none; cursor:pointer; font-weight:bold;">LOAD</button>
+        <button onclick="printAdminPdf()" style="width:auto; background:#D32F2F; color:white; padding:10px 20px; border-radius:20px; border:none; cursor:pointer; font-weight:bold;">PDF (A4 Portrait)</button>
+      </div>
+
+      <div class="table-responsive" style="background:#fff;">
+        <table id="adminTable">
+          <thead><tr><th>Date</th><th>Income</th><th>Remitted</th><th>Remarks</th><th>Action</th></tr></thead>
+          <tbody id="cashBookBody"></tbody>
+        </table>
+      </div>
+
+      <div style="background:#fff; padding:20px; margin-top:15px;">
+        <h3 style="text-align:center; color:#9C27B0; border:none; margin-bottom:20px; font-size:16px;">SUMMARY</h3>
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-weight:bold; color:#444; font-size:15px;">
+          <span>Opening Balance:</span><span id="abOpening" style="color:#D32F2F;">₹ 0.00</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-weight:bold; color:#444; font-size:15px;">
+          <span>Income on this month:</span><span id="abIncome" style="color:#388E3C;">₹ 0.00</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:15px; font-weight:bold; color:#444; font-size:15px;">
+          <span>Remittance this month:</span><span id="abRemit" style="color:#1976D2;">₹ 0.00</span>
+        </div>
+        <hr style="border:0; border-top:1px solid #ccc; margin:15px 0;">
+        <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:16px; color:#000;">
+          <span>Closing Balance:</span><span id="abClosing">₹ 0.00</span>
+        </div>
+        <p id="pendingNote" style="margin:10px 0 0; font-size:12px; color:#888; text-align:center;"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Area for PDF Generation -->
+  <div id="printArea"></div>
+
+  <script>
+    // ==========================================
+    // Firebase Configuration
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyB9RbRc2ALocSdB7Q335k91VFQNPLVdQ18",
+      authDomain: "vanasree-sales.firebaseapp.com",
+      databaseURL: "https://vanasree-sales-default-rtdb.firebaseio.com",
+      projectId: "vanasree-sales",
+      storageBucket: "vanasree-sales.firebasestorage.app",
+      messagingSenderId: "616459948644",
+      appId: "1:616459948644:web:6830ae2230a3c0b77b4571"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let itemsData = {}; // key: itemName -> item object {id,itemName,stock,mrp,baseStock}
+    const js = (v) => JSON.stringify(v);
+
+    // Connection state
+    let isConnected = null;
+
+    // Pending queue state
+    let queueDb = null;
+    let pendingCount = 0;
+    let syncRunning = false;
+
+    // ==========================================
+    // Toast + Button feedback (No OK-alert)
+    // ==========================================
+    let toastTimer = null;
+    function showToast(msg, type="info", ms=1800) {
+      const t = document.getElementById("toast");
+      t.className = "";
+      t.classList.add(type);
+      t.textContent = msg;
+      t.style.display = "block";
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.style.display = "none", ms);
+    }
+
+    function flashButton(btn, {state="success", text="✔ Done!", ms=1400} = {}) {
+      if (!btn) return;
+      const originalText = btn.dataset.originalText || btn.innerHTML;
+      btn.dataset.originalText = originalText;
+
+      btn.disabled = true;
+      btn.classList.remove("btn-saving","btn-success","btn-error");
+      btn.classList.add(state === "saving" ? "btn-saving" : state === "error" ? "btn-error" : "btn-success");
+      btn.innerHTML = text;
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove("btn-saving","btn-success","btn-error");
+        btn.innerHTML = originalText;
+      }, ms);
+    }
+
+    function updateNetBadge() {
+      const el = document.getElementById("netStatus");
+      const suffix = pendingCount > 0 ? ` (${pendingCount} pending)` : "";
+
+      if (isConnected === null) {
+        el.className = "pill connecting";
+        el.textContent = "Connecting..." + suffix;
+      } else if (isConnected) {
+        el.className = "pill online";
+        el.textContent = "Online" + suffix;
+      } else {
+        el.className = "pill offline";
+        el.textContent = "Offline (Sync Pending)" + suffix;
+      }
+    }
+
+    function initConnectionMonitor() {
+      db.ref(".info/connected").on("value", snap => {
+        isConnected = (snap.val() === true);
+        updateNetBadge();
+        if (isConnected) syncPendingOps();
+      });
+
+      window.addEventListener("offline", () => showToast("Offline mode: saved changes will sync later", "info", 2200));
+      window.addEventListener("online", () => { showToast("Internet connected: syncing...", "success", 1600); syncPendingOps(); });
+
+      // periodic sync (if something stuck)
+      setInterval(() => { if (isConnected) syncPendingOps(); }, 20000);
+    }
+
+    // ==========================================
+    // OFFLINE PENDING QUEUE (IndexedDB + localStorage fallback)
+    // ==========================================
+    const QUEUE_DB_NAME = "vanasree_pending_db_v1";
+    const QUEUE_STORE = "ops";
+    const QUEUE_LS_KEY = "vanasree_pending_ops_v1";
+
+    function safeJsonParse(s, fallback) { try { return JSON.parse(s); } catch { return fallback; } }
+
+    function openQueueDb() {
+      return new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) return reject(new Error("IndexedDB not supported"));
+        const req = indexedDB.open(QUEUE_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const idb = req.result;
+          if (!idb.objectStoreNames.contains(QUEUE_STORE)) {
+            const store = idb.createObjectStore(QUEUE_STORE, { keyPath: "opId" });
+            store.createIndex("createdAt", "createdAt", { unique: false });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function queueInit() {
+      try { queueDb = await openQueueDb(); }
+      catch { queueDb = null; }
+      await refreshPendingCount();
+    }
+
+    function lsReadAllMap() { return safeJsonParse(localStorage.getItem(QUEUE_LS_KEY) || "{}", {}); }
+    function lsWriteAllMap(map) { localStorage.setItem(QUEUE_LS_KEY, JSON.stringify(map)); }
+
+    async function queuePut(op) {
+      op.createdAt = op.createdAt || Date.now();
+      if (!queueDb) {
+        const map = lsReadAllMap();
+        map[op.opId] = op;
+        lsWriteAllMap(map);
+        await refreshPendingCount();
+        return;
+      }
+      await new Promise((resolve, reject) => {
+        const tx = queueDb.transaction(QUEUE_STORE, "readwrite");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.objectStore(QUEUE_STORE).put(op);
+      });
+      await refreshPendingCount();
+    }
+
+    async function queueGetAll() {
+      if (!queueDb) {
+        const map = lsReadAllMap();
+        return Object.values(map).sort((a,b) => (a.createdAt||0)-(b.createdAt||0));
+      }
+      return await new Promise((resolve, reject) => {
+        const tx = queueDb.transaction(QUEUE_STORE, "readonly");
+        const req = tx.objectStore(QUEUE_STORE).getAll();
+        req.onsuccess = () => resolve((req.result || []).sort((a,b)=> (a.createdAt||0)-(b.createdAt||0)));
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function queueGet(opId) {
+      if (!queueDb) {
+        const map = lsReadAllMap();
+        return map[opId] || null;
+      }
+      return await new Promise((resolve, reject) => {
+        const tx = queueDb.transaction(QUEUE_STORE, "readonly");
+        const req = tx.objectStore(QUEUE_STORE).get(opId);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function queueDelete(opId) {
+      if (!queueDb) {
+        const map = lsReadAllMap();
+        delete map[opId];
+        lsWriteAllMap(map);
+        await refreshPendingCount();
+        return;
+      }
+      await new Promise((resolve, reject) => {
+        const tx = queueDb.transaction(QUEUE_STORE, "readwrite");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.objectStore(QUEUE_STORE).delete(opId);
+      });
+      await refreshPendingCount();
+    }
+
+    async function queueCount() {
+      if (!queueDb) return Object.keys(lsReadAllMap()).length;
+      return await new Promise((resolve, reject) => {
+        const tx = queueDb.transaction(QUEUE_STORE, "readonly");
+        const req = tx.objectStore(QUEUE_STORE).count();
+        req.onsuccess = () => resolve(req.result || 0);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function refreshPendingCount() {
+      pendingCount = await queueCount();
+      updateNetBadge();
+    }
+
+    // Build quick summaries from pending ops
+    async function getPendingSummary() {
+      const ops = await queueGetAll();
+
+      const stockDeltaByItemId = {};      // itemId -> delta (negative = reduce stock)
+      const pendingSalesByDate = {};      // "dd/mm/yyyy" -> array of sale ops
+      const pendingDeleteSaleIds = new Set(); // saleId set
+      const pendingIncomeByDateKey = {};  // "dd-mm-yyyy" -> amount delta (+ adds, - deletes)
+      const pendingRemitByDateKey = {};   // dateKey -> {amount, remarks}
+
+      for (const op of ops) {
+        if (op.type === "sale") {
+          // stock reduces
+          stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
+
+          pendingSalesByDate[op.saleData.date] = pendingSalesByDate[op.saleData.date] || [];
+          pendingSalesByDate[op.saleData.date].push(op);
+
+          pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amount || 0);
+        }
+        else if (op.type === "deleteSale") {
+          // stock increases back
+          stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
+
+          pendingDeleteSaleIds.add(op.saleId);
+          pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) - (op.amount || 0);
+        }
+        else if (op.type === "return") {
+          // return reduces stock
+          stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
+        }
+        else if (op.type === "remit") {
+          pendingRemitByDateKey[op.dateKey] = op.data;
+        }
+      }
+
+      return { ops, stockDeltaByItemId, pendingSalesByDate, pendingDeleteSaleIds, pendingIncomeByDateKey, pendingRemitByDateKey };
+    }
+
+    // ==========================================
+    // Simple Login Config in Firebase (one user)
+    // ==========================================
+    const AUTH_PATH = "AppAuth";
+    let authConfig = null;
+
+    async function sha256(text) {
+      const data = new TextEncoder().encode(text);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function ensureAuthLoaded() {
+      if (authConfig) return authConfig;
+      const snap = await db.ref(AUTH_PATH).once("value");
+      if (snap.exists()) { authConfig = snap.val(); return authConfig; }
+
+      // First-time default
+      const defaultUser = "admin";
+      const defaultPass = "admin123";
+      const defaultHash = await sha256(defaultPass);
+      authConfig = { username: defaultUser, passwordHash: defaultHash };
+      await db.ref(AUTH_PATH).set(authConfig);
+      return authConfig;
+    }
+
+    async function changePasswordPrompt() {
+      try {
+        const cfg = await ensureAuthLoaded();
+
+        const oldPass = prompt("Enter OLD password:");
+        if (oldPass === null) return;
+        const oldHash = await sha256(oldPass);
+        if (oldHash !== cfg.passwordHash) { showToast("Old password is wrong!", "error", 2200); return; }
+
+        const newPass1 = prompt("Enter NEW password (min 4 chars):");
+        if (newPass1 === null) return;
+        if (newPass1.trim().length < 4) { showToast("Password too short!", "error", 2200); return; }
+
+        const newPass2 = prompt("Confirm NEW password:");
+        if (newPass2 === null) return;
+        if (newPass1 !== newPass2) { showToast("Password not matching!", "error", 2200); return; }
+
+        const newHash = await sha256(newPass1);
+        await db.ref(AUTH_PATH + "/passwordHash").set(newHash);
+        authConfig.passwordHash = newHash;
+
+        if (localStorage.getItem("rememberedUser")) localStorage.setItem("rememberedPass", newPass1);
+        showToast("Password updated successfully!", "success", 1800);
+      } catch (e) {
+        console.error(e);
+        showToast("Password change failed!", "error", 2500);
+      }
+    }
+
+    // ==========================================
+    // App Init
+    // ==========================================
+    window.onload = function () {
+      if (localStorage.getItem("rememberedUser")) {
+        document.getElementById("username").value = localStorage.getItem("rememberedUser");
+        document.getElementById("password").value = localStorage.getItem("rememberedPass") || "";
+        document.getElementById("rememberMe").checked = true;
+      }
+
+      const today = new Date().toISOString().split("T")[0];
+      document.getElementById("saleDate").value = today;
+      document.getElementById("filterSaleDate").value = today;
+
+      initConnectionMonitor();
+      queueInit().then(() => { if (isConnected) syncPendingOps(); }).catch(()=>{});
+      ensureAuthLoaded().catch(err => console.error("Auth load error:", err));
+
+      loadItemsFromFirebase();
+    };
+
+    async function handleLogin() {
+      try {
+        const u = document.getElementById("username").value.trim();
+        const p = document.getElementById("password").value.trim();
+        const remember = document.getElementById("rememberMe").checked;
+
+        document.getElementById("loginError").style.display = "none";
+        const cfg = await ensureAuthLoaded();
+        const enteredHash = await sha256(p);
+
+        if (u === cfg.username && enteredHash === cfg.passwordHash) {
+          if (remember) {
+            localStorage.setItem("rememberedUser", u);
+            localStorage.setItem("rememberedPass", p);
+          } else {
+            localStorage.removeItem("rememberedUser");
+            localStorage.removeItem("rememberedPass");
+          }
+
+          document.getElementById("loginSection").style.display = "none";
+          document.getElementById("appSection").style.display = "block";
+          switchTab("salesTab");
+          showToast("Login successful", "success", 1200);
+        } else {
+          document.getElementById("loginError").style.display = "block";
+        }
+      } catch (e) {
+        console.error(e);
+        showToast("Login error", "error", 2200);
+      }
+    }
+
+    function handleLogout() {
+      document.getElementById("appSection").style.display = "none";
+      document.getElementById("loginSection").style.display = "block";
+      document.getElementById("loginError").style.display = "none";
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+      if (tabId === "salesTab") {
+        document.querySelector(".tabs .tab:nth-child(1)").classList.add("active");
+        document.getElementById("salesTab").classList.add("active");
+        showSalesSubPage("salesMainMenu");
+      } else {
+        document.querySelector(".tabs .tab:nth-child(2)").classList.add("active");
+        document.getElementById("adminTab").classList.add("active");
+        loadAdminData();
+      }
+    }
+
+    function showSalesSubPage(pageId) {
+      document.getElementById("salesMainMenu").style.display = "none";
+      document.querySelectorAll(".sales-subpage").forEach(page => page.style.display = "none");
+      if (pageId === "salesMainMenu") {
+        document.getElementById("salesMainMenu").style.display = "block";
+      } else {
+        document.getElementById(pageId).style.display = "block";
+        if (pageId === "editSalesPage") loadSalesList();
+      }
+    }
+
+    // ==========================================
+    // Inventory (with number-migration + pending adjustments)
+    // ==========================================
+    function filterItems() {
+      const input = document.getElementById("searchItem").value.toUpperCase();
+      const trs = document.getElementById("invTable").getElementsByTagName("tr");
+      for (let i = 1; i < trs.length; i++) {
+        const td = trs[i].getElementsByTagName("td")[0];
+        if (td) {
+          const txtValue = td.textContent || td.innerText;
+          trs[i].style.display = txtValue.toUpperCase().indexOf(input) > -1 ? "" : "none";
+        }
+      }
+    }
+
+    function loadItemsFromFirebase() {
+      db.ref("Items").on("value", async snapshot => {
+        const addSalesSelect = document.getElementById("salesItemSelect");
+        const invBody = document.getElementById("inventoryListBody");
+
+        addSalesSelect.innerHTML = "";
+        invBody.innerHTML = "";
+        itemsData = {};
+
+        let list = [];
+        snapshot.forEach(child => list.push(child.val()));
+        list.sort((a, b) => (a.itemName || "").localeCompare((b.itemName || "")));
+
+        // show import button if no items
+        document.getElementById("importBtn").style.display = (list.length > 0) ? "none" : "block";
+
+        // number-migrate + build map
+        for (const item of list) {
+          if (!item || !item.itemName || !item.id) continue;
+
+          const stockNum = (typeof item.stock === "number") ? item.stock : (parseInt(item.stock, 10) || 0);
+          const mrpNum   = (typeof item.mrp === "number") ? item.mrp : (parseFloat(item.mrp) || 0);
+
+          // migrate old string values to numbers
+          if (typeof item.stock !== "number") db.ref("Items/" + item.id + "/stock").set(stockNum);
+          if (typeof item.mrp !== "number") db.ref("Items/" + item.id + "/mrp").set(mrpNum);
+
+          item.baseStock = stockNum;
+          item.stock = stockNum;
+          item.mrp = mrpNum;
+
+          itemsData[item.itemName] = item;
+        }
+
+        // apply pending stock adjustments (so offline pending doesn't allow oversell after reload)
+        const summary = await getPendingSummary();
+        for (const name in itemsData) {
+          const it = itemsData[name];
+          const delta = summary.stockDeltaByItemId[it.id] || 0;
+          const effective = (it.baseStock || 0) + delta; // delta likely negative
+          it.stock = Math.max(0, effective);
+        }
+
+        // render UI
+        for (const item of list) {
+          if (!item || !item.itemName) continue;
+          const it = itemsData[item.itemName];
+          if (!it) continue;
+
+          addSalesSelect.add(new Option(it.itemName, it.itemName));
+
+          invBody.innerHTML += `<tr>
+            <td style="text-align:left;">${it.itemName}</td>
+            <td style="font-weight:bold;">${it.stock}</td>
+            <td>₹${Number(it.mrp).toFixed(2)}</td>
+            <td>
+              <button class="edit-btn" onclick='editInvItem(${js(it.id)}, ${js(it.itemName)}, ${js(it.baseStock)}, ${js(it.mrp)})'>Edit</button>
+              <button class="delete-btn" onclick='deleteInvItem(${js(it.id)}, ${js(it.itemName)})'>Delete</button>
+            </td>
+          </tr>`;
+        }
+
+        updateSalesStockDetails();
+      });
+    }
+
+    function addNewInvItem() {
+      const name = document.getElementById("invNewName").value.trim();
+      const stock = parseInt(document.getElementById("invNewStock").value, 10) || 0;
+      const mrp = parseFloat(document.getElementById("invNewMrp").value) || 0;
+
+      if (!name || !mrp) { alert("ഐറ്റത്തിന്റെ പേരും വിലയും നിർബന്ധമാണ്!"); return; }
+      if (itemsData[name]) { alert("ഈ ഐറ്റം നിലവിലുണ്ട്!"); return; }
+
+      const itemId = db.ref("Items").push().key;
+      db.ref("Items/" + itemId).set({ id: itemId, itemName: name, stock: stock, mrp: mrp })
+        .then(() => {
+          document.getElementById("invNewName").value = "";
+          document.getElementById("invNewStock").value = "";
+          document.getElementById("invNewMrp").value = "";
+          showToast("Item added", "success");
+        })
+        .catch(() => showToast("Failed to add item", "error", 2200));
+    }
+
+    function editInvItem(id, currentName, currentStock, currentMrp) {
+      const newName = prompt("പുതിയ പേര് നൽകുക:", currentName);
+      if (newName === null || newName.trim() === "") return;
+
+      const newStock = prompt("സ്റ്റോക്ക് എത്രയാണ്?", currentStock);
+      if (newStock === null) return;
+
+      const newMrp = prompt("പുതിയ MRP നൽകുക:", currentMrp);
+      if (newMrp === null) return;
+
+      db.ref("Items/" + id).update({
+        itemName: newName.trim(),
+        stock: (parseInt(newStock, 10) || 0),
+        mrp: (parseFloat(newMrp) || 0)
+      }).then(() => showToast("വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു!", "success"))
+        .catch(() => showToast("Update failed", "error", 2200));
+    }
+
+    function deleteInvItem(id, name) {
+      if (confirm(`"${name}" പൂർണ്ണമായും മായ്ച്ചു കളയണമെന്ന് ഉറപ്പാണോ?`)) {
+        db.ref("Items/" + id).remove()
+          .then(() => showToast("Deleted", "success"))
+          .catch(() => showToast("Delete failed", "error", 2200));
+      }
+    }
+
+    // Offline-persistent return
+    async function returnStockPrompt() {
+      const name = prompt("ഏത് ഐറ്റം ആണ് തിരികെ (Return) നൽകുന്നത്? (ഐറ്റത്തിന്റെ പേര് നൽകുക)");
+      if (!name) return;
+      if (!itemsData[name]) { alert("ഈ പേരിലുള്ള ഐറ്റം സ്റ്റോക്കിൽ ലഭ്യമല്ല!"); return; }
+
+      const qtyStr = prompt(`'${name}' എത്ര എണ്ണം Return ആണ്? (Stock: ${itemsData[name].stock})`);
+      if (!qtyStr) return;
+
+      const qty = parseInt(qtyStr, 10);
+      if (isNaN(qty) || qty <= 0) { alert("ശരിയായ എണ്ണം നൽകുക!"); return; }
+
+      const currentStock = parseInt(itemsData[name].stock, 10) || 0;
+      if (qty > currentStock) { alert("നിലവിലുള്ള സ്റ്റോക്കിനേക്കാൾ കൂടുതൽ Return നൽകാൻ കഴിയില്ല!"); return; }
+
+      const monthKey = new Date().toISOString().split("T")[0].substring(0, 7); // yyyy-mm
+      const returnId = db.ref("Returns/" + monthKey).push().key;
+
+      const data = { date: new Date().toISOString().split("T")[0], itemName: name, quantity: qty };
+
+      await queuePut({
+        opId: "return:" + returnId,
+        type: "return",
+        monthKey,
+        returnId,
+        itemId: itemsData[name].id,
+        itemName: name,
+        qty,
+        data
+      });
+
+      // optimistic stock reduce
+      itemsData[name].stock = Math.max(0, (parseInt(itemsData[name].stock, 10) || 0) - qty);
+      updateSalesStockDetails();
+
+      showToast("Return saved (syncs when online)", "success", 2000);
+      syncPendingOps();
+    }
+
+    // ==========================================
+    // Billing (Offline-first, persistent)
+    // ==========================================
+    function updateSalesStockDetails() {
+      const name = document.getElementById("salesItemSelect").value;
+      const it = itemsData[name];
+      document.getElementById("lblSalesAvailableStock").innerText = "Stock: " + (it ? it.stock : 0);
+      calculateTotalAmount();
+    }
+
+    function calculateTotalAmount() {
+      const name = document.getElementById("salesItemSelect").value;
+      const qty = parseFloat(document.getElementById("saleQty").value) || 0;
+      const it = itemsData[name];
+      if (!it) { document.getElementById("saleTotalAmt").innerText = "₹ 0.00"; return; }
+      document.getElementById("saleTotalAmt").innerText = "₹ " + (qty * (parseFloat(it.mrp) || 0)).toFixed(2);
+    }
+
+    function getFormattedDate(dateString) {
+      if (!dateString) return "";
+      const p = dateString.split("-");
+      return `${p[2]}/${p[1]}/${p[0]}`;
+    }
+
+    async function saveBill(btn) {
+      const dateRaw = document.getElementById("saleDate").value;
+      const formattedDate = getFormattedDate(dateRaw);
+      const name = document.getElementById("salesItemSelect").value;
+      const item = itemsData[name];
+
+      if (!formattedDate) { alert("Date തിരഞ്ഞെടുക്കുക!"); return; }
+      if (!item) { alert("Item select ചെയ്യുക!"); return; }
+
+      const qtyNum = parseInt(document.getElementById("saleQty").value, 10);
+      if (!qtyNum || qtyNum <= 0) { alert("ശരിയായ എണ്ണം നൽകുക!"); return; }
+
+      const currentStock = parseInt(item.stock, 10) || 0;
+      if (qtyNum > currentStock) { alert("സ്റ്റോക്ക് ലഭ്യമല്ല!"); return; }
+
+      const mrp = parseFloat(item.mrp) || 0;
+      const totalAmt = qtyNum * mrp;
+
+      // instant UI feedback (no waiting)
+      flashButton(btn, { state: "success", text: "✔ ബിൽ സേവ് ചെയ്തു!", ms: 1500 });
+      document.getElementById("saleQty").value = "";
+      document.getElementById("saleTotalAmt").innerText = "₹ 0.00";
+
+      // stable IDs so sync is idempotent
+      const saleId = db.ref("Sales").push().key;
+      const dateKey = formattedDate.replaceAll("/", "-"); // dd-mm-yyyy
+
+      const saleData = {
+        id: saleId,
+        date: formattedDate,
+        itemName: name,
+        quantity: qtyNum,
+        amount: Number(totalAmt.toFixed(2))
+      };
+
+      // persist to queue (survives app close)
+      await queuePut({
+        opId: "sale:" + saleId,
+        type: "sale",
+        saleId,
+        dateKey,
+        itemId: item.id,
+        itemName: name,
+        qty: qtyNum,
+        amount: Number(totalAmt.toFixed(2)),
+        saleData
+      });
+
+      // optimistic stock reduce
+      item.stock = Math.max(0, (parseInt(item.stock, 10) || 0) - qtyNum);
+      updateSalesStockDetails();
+
+      // try sync
+      syncPendingOps();
+    }
+
+    async function cancelPendingSale(opId) {
+      const op = await queueGet(opId);
+      if (!op || op.type !== "sale") return;
+
+      // revert stock locally
+      const itemName = op.itemName;
+      if (itemsData[itemName]) itemsData[itemName].stock = (parseInt(itemsData[itemName].stock, 10) || 0) + (op.qty || 0);
+
+      await queueDelete(opId);
+      showToast("Pending sale cancelled", "success", 1500);
+      updateSalesStockDetails();
+      loadSalesList();
+    }
+
+    async function loadSalesList() {
+      const formattedDate = getFormattedDate(document.getElementById("filterSaleDate").value);
+      const tbody = document.getElementById("salesListBody");
+      if (!formattedDate) { tbody.innerHTML = "<tr><td colspan='4'>Date തിരഞ്ഞെടുക്കുക</td></tr>"; return; }
+
+      const summary = await getPendingSummary();
+      const pendingAdds = summary.pendingSalesByDate[formattedDate] || [];
+      const deletedIds = summary.pendingDeleteSaleIds;
+
+      db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value", snap => {
+        tbody.innerHTML = "";
+
+        // pending adds first
+        for (const op of pendingAdds) {
+          const s = op.saleData;
+          tbody.innerHTML += `<tr style="background:#FFFDE7;">
+            <td style="text-align:left;">${s.itemName} <span class="badge-pending">PENDING</span></td>
+            <td>${s.quantity}</td>
+            <td>₹ ${Number(s.amount).toFixed(2)}</td>
+            <td><button class="delete-btn" onclick='cancelPendingSale(${js(op.opId)})'>Cancel</button></td>
+          </tr>`;
+        }
+
+        let anyServer = false;
+        snap.forEach(child => {
+          const sale = child.val();
+          if (deletedIds.has(sale.id)) return; // hide locally deleted (pending)
+          anyServer = true;
+
+          const q = Number(sale.quantity) || 0;
+          const a = Number(sale.amount) || 0;
+
+          tbody.innerHTML += `<tr>
+            <td style="text-align:left;">${sale.itemName}</td>
+            <td>${q}</td>
+            <td>₹ ${a.toFixed(2)}</td>
+            <td><button class="delete-btn" onclick='deleteSale(${js(sale.id)}, ${js(sale.itemName)}, ${q}, ${a}, ${js(sale.date)})'>Delete</button></td>
+          </tr>`;
+        });
+
+        if (!anyServer && pendingAdds.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='4'>ബില്ലുകൾ ലഭ്യമല്ല</td></tr>";
+        }
+      });
+    }
+
+    // Offline-persistent delete
+    async function deleteSale(saleId, itemName, qty, amt, saleDateStr) {
+      if (!confirm("ഈ ബിൽ ഡിലീറ്റ് ചെയ്യണോ?")) return;
+
+      // If this saleId is actually pending add (rare), cancel it
+      const pendingAddOp = await queueGet("sale:" + saleId);
+      if (pendingAddOp) {
+        await cancelPendingSale("sale:" + saleId);
+        return;
+      }
+
+      const item = itemsData[itemName];
+      if (!item) { showToast("Item not found in inventory", "error", 2200); return; }
+
+      const dateKey = saleDateStr.replaceAll("/", "-");
+
+      await queuePut({
+        opId: "delSale:" + saleId,
+        type: "deleteSale",
+        saleId,
+        dateKey,
+        itemId: item.id,
+        itemName,
+        qty: parseInt(qty, 10) || 0,
+        amount: Number(parseFloat(amt) || 0)
+      });
+
+      // optimistic stock add back
+      item.stock = (parseInt(item.stock, 10) || 0) + (parseInt(qty, 10) || 0);
+      updateSalesStockDetails();
+
+      showToast("Delete queued (syncs when online)", "success", 1800);
+      loadSalesList();
+      syncPendingOps();
+    }
+
+    // ==========================================
+    // SYNC ENGINE (uploads pending ops when online)
+    // ==========================================
+    async function syncPendingOps() {
+      if (!isConnected) return;
+      if (syncRunning) return;
+      syncRunning = true;
+
+      try {
+        const summary = await getPendingSummary();
+        if (!summary.ops || summary.ops.length === 0) return;
+
+        for (const op of summary.ops) {
+          if (!isConnected) break;
+
+          try {
+            if (op.type === "sale") await syncSaleOp(op);
+            else if (op.type === "deleteSale") await syncDeleteSaleOp(op);
+            else if (op.type === "remit") await syncRemitOp(op);
+            else if (op.type === "return") await syncReturnOp(op);
+          } catch (e) {
+            console.error("sync op failed:", op, e);
+            // stop loop to avoid repeated failures spamming
+            break;
+          }
+        }
+      } finally {
+        syncRunning = false;
+        await refreshPendingCount();
+        updateNetBadge();
+      }
+    }
+
+    async function syncSaleOp(op) {
+      // idempotent: if sale already exists, done
+      const exists = await db.ref("Sales/" + op.saleId).once("value");
+      if (exists.exists()) { await queueDelete(op.opId); return; }
+
+      const updates = {};
+      updates["Sales/" + op.saleId] = op.saleData;
+      updates["DailySales/" + op.dateKey] = firebase.database.ServerValue.increment(op.amount);
+      updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
+
+      await db.ref().update(updates);
+      await queueDelete(op.opId);
+    }
+
+    async function syncDeleteSaleOp(op) {
+      // if already deleted, done
+      const exists = await db.ref("Sales/" + op.saleId).once("value");
+      if (!exists.exists()) { await queueDelete(op.opId); return; }
+
+      const updates = {};
+      updates["Sales/" + op.saleId] = null;
+      updates["DailySales/" + op.dateKey] = firebase.database.ServerValue.increment(-op.amount);
+      updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(+op.qty);
+
+      await db.ref().update(updates);
+      await queueDelete(op.opId);
+    }
+
+    async function syncRemitOp(op) {
+      await db.ref("Remittances/" + op.dateKey).set(op.data);
+      await queueDelete(op.opId);
+    }
+
+    async function syncReturnOp(op) {
+      const exists = await db.ref("Returns/" + op.monthKey + "/" + op.returnId).once("value");
+      if (exists.exists()) { await queueDelete(op.opId); return; }
+
+      const updates = {};
+      updates["Returns/" + op.monthKey + "/" + op.returnId] = op.data;
+      updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
+
+      await db.ref().update(updates);
+      await queueDelete(op.opId);
+    }
+
+    // ==========================================
+    // CASH BOOK (overlay pending sales/remit in UI)
+    // ==========================================
+    async function loadAdminData() {
+      const month = document.getElementById("adminMonth").value; // "01".."12"
+      const year = document.getElementById("adminYear").value;
+
+      const tbody = document.getElementById("cashBookBody");
+      tbody.innerHTML = "";
+
+      const days = new Date(parseInt(year,10), parseInt(month,10), 0).getDate();
+
+      const summary = await getPendingSummary();
+
+      let totalIncome = 0, totalRemit = 0;
+      let totalPendingIncome = 0;
+      let pendingRemitCount = 0;
+
+      const salesSnap = await db.ref("DailySales").once("value");
+      const remitSnap = await db.ref("Remittances").once("value");
+
+      for (let i=1; i<=days; i++) {
+        const dayStr = String(i).padStart(2, '0');
+        const dateKey = `${dayStr}-${month}-${year}`;
+        const displayDate = `${dayStr}/${month}/${year}`;
+
+        const incomeServer = parseFloat(salesSnap.child(dateKey).val()) || 0;
+        const incomePending = summary.pendingIncomeByDateKey[dateKey] || 0;
+        const incomeTotal = incomeServer + incomePending;
+
+        const remitServerNode = remitSnap.child(dateKey).val() || {};
+        const remitServerAmt = parseFloat(remitServerNode.amount) || 0;
+        const remitServerRemarks = (remitServerNode.remarks || "");
+
+        let remitShownAmt = remitServerAmt;
+        let remitShownRemarks = remitServerRemarks;
+        let remitPendingBadge = "";
+
+        if (summary.pendingRemitByDateKey[dateKey]) {
+          remitShownAmt = parseFloat(summary.pendingRemitByDateKey[dateKey].amount) || 0;
+          remitShownRemarks = summary.pendingRemitByDateKey[dateKey].remarks || "";
+          remitPendingBadge = ` <span class="badge-pending">PENDING</span>`;
+          pendingRemitCount++;
+        }
+
+        totalIncome += incomeTotal;
+        totalRemit += remitShownAmt;
+        totalPendingIncome += incomePending;
+
+        tbody.innerHTML += `<tr>
+          <td>${displayDate}</td>
+          <td style="color:#2E7D32; font-weight:bold;">
+            ${incomeTotal > 0 ? incomeTotal.toFixed(2) : '-'}
+            ${incomePending !== 0 ? ` <span class="badge-pending">+pending</span>` : ``}
+          </td>
+          <td style="color:#1976D2; font-weight:bold;">${remitShownAmt > 0 ? remitShownAmt.toFixed(2) : '-' }${remitPendingBadge}</td>
+          <td>${remitShownRemarks || '-'}</td>
+          <td><span onclick='editRemittance(${js(dateKey)}, ${remitShownAmt}, ${js(remitShownRemarks)})' style="color:#2196F3; cursor:pointer; text-decoration:underline; font-weight:bold;">Edit</span></td>
+        </tr>`;
+      }
+
+      document.getElementById("abIncome").innerText = `₹ ${totalIncome.toFixed(2)}`;
+      document.getElementById("abRemit").innerText = `₹ ${totalRemit.toFixed(2)}`;
+
+      // pending note
+      const note = document.getElementById("pendingNote");
+      if (pendingCount > 0) {
+        note.innerText = `Note: ${pendingCount} pending operations (Income pending: ₹${totalPendingIncome.toFixed(2)}, Remit pending edits: ${pendingRemitCount})`;
+      } else {
+        note.innerText = "";
+      }
+
+      await calculateAbstractBalance(month, year, totalIncome, totalRemit);
+    }
+
+    async function calculateAbstractBalance(month, year, income, remit) {
+      const m = parseInt(month, 10);
+      const y = parseInt(year, 10);
+
+      const prevMonth = (m === 1) ? 12 : (m - 1);
+      const prevYear  = (m === 1) ? (y - 1) : y;
+
+      const prevKey = `${String(prevMonth).padStart(2, '0')}-${prevYear}`; // MM-YYYY
+      const curKey  = `${String(m).padStart(2, '0')}-${y}`;               // MM-YYYY
+
+      const snap = await db.ref("Balances/" + prevKey + "/closingBalance").once("value");
+      const opening = parseFloat(snap.val()) || 0;
+
+      document.getElementById("abOpening").innerText = `₹ ${opening.toFixed(2)}`;
+      const closing = (opening + (parseFloat(income) || 0)) - (parseFloat(remit) || 0);
+      document.getElementById("abClosing").innerText = `₹ ${closing.toFixed(2)}`;
+
+      // write closing balance only when online and queue empty (to avoid temporary mismatch)
+      if (isConnected && pendingCount === 0) {
+        db.ref("Balances/" + curKey + "/closingBalance").set(closing);
+      }
+    }
+
+    // Remittance edit -> persistent queue
+    async function editRemittance(dateKey, oldAmt, oldRemarks) {
+      const amtStr = prompt(`ബാങ്കിൽ അടച്ച തുക നൽകുക (${dateKey}):`, (oldAmt > 0 ? oldAmt : ""));
+      if (amtStr === null) return;
+
+      const remarks = prompt("Remarks (ഉദാ: Challan No):", oldRemarks || "") ?? "";
+      const data = { amount: parseFloat(amtStr) || 0, remarks: remarks };
+
+      await queuePut({ opId: "remit:" + dateKey, type: "remit", dateKey, data });
+
+      showToast("Remittance saved (syncs when online)", "success", 1800);
+      loadAdminData();
+      syncPendingOps();
+    }
+
+    // ==========================================
+    // PRINTING (Dynamic @page to satisfy A4 Portrait + Landscape requirements)
+    // ==========================================
+    function setPrintMode(mode) {
+      // mode: "cashbook" -> A4 portrait, one page fit; "monthly" -> A4 landscape minimized pages
+      let style = document.getElementById("dynamicPrintStyle");
+      if (!style) {
+        style = document.createElement("style");
+        style.id = "dynamicPrintStyle";
+        document.head.appendChild(style);
+      }
+
+      if (mode === "cashbook") {
+        style.textContent = `
+          @media print {
+            @page { size: A4 portrait; margin: 4mm; }
+            #printArea { zoom: 1; }
+            .print-wrap { width: 100%; }
+            .print-title { font-size: 16px; margin: 0 0 8px; text-align: center; color:#000; }
+            .print-sub { font-size: 11px; margin: 0 0 8px; text-align: center; color:#000; }
+            .print-meta { display:flex; justify-content:space-between; gap:10px; margin: 6px 0 8px; font-size: 11px; font-weight: 700; }
+            .print-table { font-size: 10px; }
+            .print-table th, .print-table td { padding: 3px 4px; }
+            .print-table th { background:#eee !important; -webkit-print-color-adjust: exact; color:#000; }
+          }
+        `;
+      } else {
+        style.textContent = `
+          @media print {
+            @page { size: A4 landscape; margin: 3mm; }
+            #printArea { zoom: 1; }
+            .print-title { font-size: 14px; margin: 0 0 6px; text-align: center; color:#000; }
+            .print-sub { font-size: 10px; margin: 0 0 10px; text-align: center; color:#000; }
+            .print-table { font-size: 7.5px; table-layout: auto; }
+            .print-table th, .print-table td { padding: 2px 2px; }
+            .print-table th { background:#E8F5E9 !important; -webkit-print-color-adjust: exact; color:#000; }
+            .rotate-text { height: 62px; padding: 2px 1px; }
+            tr { page-break-inside: avoid; }
+          }
+        `;
+      }
+    }
+
+    function clearPrintMode() {
+      const style = document.getElementById("dynamicPrintStyle");
+      if (style) style.remove();
+      document.getElementById("printArea").style.zoom = 1;
+      document.getElementById("printArea").innerHTML = "";
+    }
+
+    window.addEventListener("afterprint", clearPrintMode);
+
+    // Try to force cashbook into one page by scaling down if needed
+    function autoFitPrintAreaPortraitOnePage() {
+      const printArea = document.getElementById("printArea");
+      printArea.style.zoom = 1;
+
+      // Rough A4 portrait printable height in px at ~96dpi, with small margins
+      const maxH = 1050; // tuned for Chrome
+      const maxW = 780;
+
+      const h = printArea.scrollHeight;
+      const w = printArea.scrollWidth;
+
+      const scale = Math.min(1, maxH / h, maxW / w);
+      printArea.style.zoom = scale.toFixed(3);
+    }
+
+    function printAdminPdf() {
+      const month = document.getElementById("adminMonth").value;
+      const year = document.getElementById("adminYear").value;
+
+      const rows = document.querySelectorAll("#cashBookBody tr");
+      if (rows.length === 0) { alert("ദയവായി ആദ്യം LOAD ബട്ടൺ അമർത്തുക!"); return; }
+
+      setPrintMode("cashbook");
+
+      let html = `
+        <div class="print-wrap">
+          <h2 class="print-title">Peppara Vanasree Cash Book (${month}/${year})</h2>
+          <div class="print-meta">
+            <div>
+              Opening: <span style="color:#D32F2F;">${document.getElementById("abOpening").innerText}</span><br>
+              Income: <span style="color:#2E7D32;">${document.getElementById("abIncome").innerText}</span>
+            </div>
+            <div style="text-align:right;">
+              Remit: <span style="color:#1976D2;">${document.getElementById("abRemit").innerText}</span><br>
+              Closing: <span>${document.getElementById("abClosing").innerText}</span>
+            </div>
+          </div>
+
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th style="padding:6px;">Date</th>
+                <th style="padding:6px;">Income</th>
+                <th style="padding:6px;">Remitted</th>
+                <th style="padding:6px;">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>`;
+
+      rows.forEach(row => {
+        const cols = row.querySelectorAll("td");
+        if (cols.length >= 4) {
+          html += `<tr>
+            <td>${cols[0].innerText}</td>
+            <td>${cols[1].innerText}</td>
+            <td>${cols[2].innerText}</td>
+            <td style="text-align:left;">${cols[3].innerText}</td>
+          </tr>`;
+        }
+      });
+
+      html += `</tbody></table></div>`;
+
+      const printArea = document.getElementById("printArea");
+      printArea.innerHTML = html;
+
+      // Fit to one page (best effort)
+      autoFitPrintAreaPortraitOnePage();
+
+      setTimeout(() => window.print(), 350);
+    }
+
+    // ==========================================
+    // Monthly PDF (Landscape, minimized pages)
+    // ==========================================
+    function printWebPdf() {
+      const month = document.getElementById("pdfMonth").value;
+      const year = document.getElementById("pdfYear").value;
+      const monthYearStr = `/${month}/${year}`;
+      const dbMonthStr = `${year}-${month}`;
+
+      setPrintMode("monthly");
+
+      db.ref("Sales").once("value", salesSnapshot => {
+        db.ref("Items").once("value", itemsSnapshot => {
+          db.ref("Returns/" + dbMonthStr).once("value", returnsSnapshot => {
+
+            let salesList = [];
+            salesSnapshot.forEach(child => {
+              const s = child.val();
+              if (s.date && s.date.endsWith(monthYearStr)) salesList.push(s);
+            });
+
+            let itemList = [];
+            itemsSnapshot.forEach(child => itemList.push(child.val()));
+
+            let returnsList = [];
+            returnsSnapshot.forEach(child => returnsList.push(child.val()));
+
+            if (salesList.length === 0 && itemList.length === 0) { alert("ഡാറ്റ ലഭ്യമല്ല!"); return; }
+
+            itemList.sort((a, b) => (a.itemName || "").localeCompare((b.itemName || "")));
+            const daysInMonth = new Date(parseInt(year,10), parseInt(month,10), 0).getDate();
+            const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+            const monthName = monthNames[parseInt(month,10)-1];
+
+            let html = `
+              <h2 class="print-title">Peppara Eco tourism EDC</h2>
+              <h3 class="print-sub">Vanasree Stock cum sales register for the month of ${monthName} ${year}</h3>
+              <table class="print-table">
+                <thead>
+                  <tr>
+                    <th>Sl<br>No</th>
+                    <th style="width:220px;">Item Name</th>
+                    <th>Rate/<br>Unit</th>
+                    <th>Opening<br>stock</th>
+                    <th>Purchase</th>
+                    <th>Total<br>stock</th>`;
+
+            for (let i=1; i<=daysInMonth; i++) {
+              html += `<th class="rotate-text"><span>${String(i).padStart(2,'0')}/${month}/${year}</span></th>`;
+            }
+
+            html += `
+                    <th>Total<br>Sale</th>
+                    <th>Total<br>amount<br>collected</th>
+                    <th>Closing<br>stock</th>
+                    <th>Stock<br>returned</th>
+                    <th>Balance<br>stock</th>
+                    <th>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>`;
+
+            let slNo = 1;
+            let grandTotalAmount = 0;
+            let dailyTotals = new Array(daysInMonth).fill(0);
+
+            itemList.forEach(item => {
+              if (!item || !item.itemName) return;
+
+              const itemName = item.itemName;
+              const mrp = (typeof item.mrp === "number") ? item.mrp : (parseFloat(item.mrp) || 0);
+              const currentClosing = (typeof item.stock === "number") ? item.stock : (parseInt(item.stock,10) || 0);
+
+              let itemTotalQty = 0;
+              let itemTotalAmt = 0;
+              let datesHtml = "";
+
+              for (let i=1; i<=daysInMonth; i++) {
+                const dateStr = `${String(i).padStart(2,'0')}/${month}/${year}`;
+                let dayQty = 0;
+                let dayAmt = 0;
+
+                for (const sale of salesList) {
+                  if (sale.itemName === itemName && sale.date === dateStr) {
+                    dayQty += parseInt(sale.quantity,10) || 0;
+                    dayAmt += parseFloat(sale.amount) || 0;
+                  }
+                }
+
+                itemTotalQty += dayQty;
+                itemTotalAmt += dayAmt;
+                dailyTotals[i-1] += dayAmt;
+
+                datesHtml += `<td>${dayQty > 0 ? dayQty : ""}</td>`;
+              }
+
+              let itemReturnedQty = 0;
+              for (const ret of returnsList) {
+                if (ret.itemName === itemName) itemReturnedQty += parseInt(ret.quantity,10) || 0;
+              }
+
+              grandTotalAmount += itemTotalAmt;
+
+              const balanceStock = currentClosing;
+              const closingStockBeforeReturn = balanceStock + itemReturnedQty;
+              const totalStock = closingStockBeforeReturn + itemTotalQty;
+              const openingStock = totalStock;
+
+              html += `<tr>
+                <td>${slNo++}</td>
+                <td style="text-align:left;">${itemName}</td>
+                <td>${mrp.toFixed(2)}</td>
+                <td>${openingStock}</td>
+                <td></td>
+                <td>${totalStock}</td>
+                ${datesHtml}
+                <td>${itemTotalQty > 0 ? itemTotalQty : "0"}</td>
+                <td>${itemTotalAmt > 0 ? itemTotalAmt.toFixed(2) : "0.00"}</td>
+                <td>${closingStockBeforeReturn}</td>
+                <td>${itemReturnedQty > 0 ? itemReturnedQty : ""}</td>
+                <td>${balanceStock}</td>
+                <td></td>
+              </tr>`;
+            });
+
+            // Totals row
+            html += `<tr><td colspan="6" style="text-align:right; font-weight:bold; padding-right:6px;">Total</td>`;
+            for (let i=0; i<daysInMonth; i++) {
+              html += `<td class="rotate-text" style="font-weight:bold; color:#D32F2F;"><span>${dailyTotals[i] > 0 ? ('₹' + dailyTotals[i].toFixed(2)) : ""}</span></td>`;
+            }
+            html += `<td style="font-weight:bold;"></td>
+                     <td style="font-weight:bold; color:#D32F2F;">₹${grandTotalAmount.toFixed(2)}</td>
+                     <td colspan="4"></td></tr>`;
+
+            html += `</tbody></table>`;
+
+            document.getElementById("printArea").innerHTML = html;
+            setTimeout(() => window.print(), 350);
+          });
+        });
+      });
+    }
+
+    // ==========================================
+    // Bulk Import (compressed text format)
+    // ==========================================
+    function bulkImportItems() {
+      if (!confirm("മുന്നറിയിപ്പ്: ഇത് ക്ലിക്ക് ചെയ്താൽ PDF-ലെ 189 ഐറ്റങ്ങൾ പൂർണ്ണമായി വെബ്സൈറ്റിലേക്ക് ആഡ് ആകുന്നതാണ്. ഇത് ഒരു തവണ മാത്രം ചെയ്യുക! തുടരണോ?")) return;
+
+      document.getElementById("importBtn").style.display = "none";
+
+      const bulkText = `
+3 in 1 Sandal Soap Famili Pack (₹174)|174.00|31
+3 in 1 Sandal Soap Famili Pack (₹195)|195.00|0
+Agasthya Hair Oil - അഗസ്‌ത്യ ഹെയർ ഓയിൽ - 100|150.00|11
+Ajwain Seed - അയമോദകം - 80 g|50.00|4
+Aloe Vera Gel - കറ്റാർ വാഴ ജൽ - 200 g|200.00|32
+Amla Kanthari - നെല്ലിക്ക കാന്താരി - 500 ml|140.00|5
+Asafoetida|70.00|4
+Ashwagandha Powder - അശ്വഗന്ധ പൗഡർ - 50 g|100.00|19
+Ashwagandha Tea - അശ്വഗന്ധ റ്റീ - 250 g|190.00|0
+Arrowroot Powder - കൂവപ്പൊടി - 150 g|250.00|15
+Basket|175.00|0
+Bamboo Rice - മുളയരി - 500 g|250.00|1
+Bhringraj Powder - കയ്യുന്നിപൊടി - 100 g|50.00|5
+Big Honey - വൻതേൻ - 200 g (₹120)|120.00|0
+Big Honey - വൻതേൻ - 200 g (₹140)|140.00|1
+Big Honey - വൻതേൻ - 300 g|210.00|41
+Big Honey - വൻതേൻ - 500 g (₹300)|300.00|0
+Big Honey - വൻതേൻ - 500 g (₹350)|350.00|22
+Black Dammer - കറുത്ത കുന്തിരിക്കം - 100 g|60.00|0
+Black Dammer - കറുത്ത കുന്തിരിക്കം - 200 g|120.00|0
+Black pepper - കുരുമുളക് - 100 g|100.00|2
+Black pepper - കുരുമുളക് പൊടി - 100 g|120.00|29
+Blue Pea Tea - 250 gm|190.00|0
+Book - ആരണ്യ കാണ്ഡം|180.00|0
+Cardamom- ഏലയ്ക്ക - 25g|105.00|26
+Cardamom- ഏലയ്ക്ക - 50 g|210.00|19
+Cardamom Tea - 250 g|210.00|5
+Ceramic Plate|115.00|21
+Charcoal Tooth Powder - ഉമിക്കരി - 15 g|50.00|5
+Chembarathi poo powder - ചെമ്പരത്തിപൂ പൊടി - 100|125.00|0
+Chiya Seed - 100 g|50.00|4
+Chocolate Tea - 250 g|210.00|0
+Cinnamon - കറുകപ്പട്ട - 100 g|60.00|10
+Cinnamon Tea - 250 g|190.00|0
+Clove - 50 g (₹110)|110.00|1
+Clove - 50 g (₹90)|90.00|15
+Coffee Powder - 280 g|200.00|0
+Cone Flakes - 400 g|125.00|1
+Cycas Nuts Powder - ഈന്ത് പൊടി - 200 g|200.00|29
+Dahasamani - ദാഹശമിനി - 60 g|100.00|21
+Danthapala Oil - ദന്തപ്പാല ഓയിൽ - 100 ml|190.00|8
+Dry Ginger - ചുക്ക് കാപ്പിപൊടി - 50 g (₹100)|100.00|0
+Dry Ginger - ചുക്ക് കാപ്പിപൊടി - 50 g (₹125)|125.00|23
+Ebony Mala - എബണി മാല - 6 MM|175.00|3
+Eucalyptus oil - യൂക്കാലി തൈലം - 100 ml|260.00|24
+Flower Basket - പൂക്കൂട|325.00|5
+Flytone - ഈച്ച നാശിനി - 100 ml|100.00|4
+Frigde Magnet|75.00|1
+Fruite Box|325.00|12
+Ginger Tea 250 g|190.00|0
+Ginger Coffee - 250 gm|170.00|10
+Ginger Sherbet - ജിഞ്ചർ സർബത്ത് - 500 ml|125.00|56
+Ginger Candy - ഇഞ്ചി മിഠായി - 80 g|50.00|1
+Goosberry - Honey Amla|175.00|0
+Green Tea - 100 g|100.00|0
+Green Tea Lemon - 100 g|130.00|0
+Henna Powder - മൈലാഞ്ചി പൊടി - 100 g|125.00|26
+Herbs Tea - 250 g|210.00|0
+Hibiscus Powder - 100 g (ചെമ്പരത്തിപൂ പൊടി)|125.00|19
+Hibiscus Tea - 250 g|190.00|5
+Imli candy - പുളിമുട്ടായി - 80 g|40.00|0
+Indian frankincense (മണി കുന്തിരിക്കം) - 200 g|140.00|23
+Indigo powder - നീലയമരി - 100 g|125.00|12
+Instant Coffee - 100 g|230.00|3
+Instant Coffee Cardamom - 100 g (₹240)|240.00|3
+Instant Coffee Cardamom - 100 g (₹250)|250.00|0
+Instant Coffee Chocolate - 100 g|220.00|0
+Instant Coffee Chocolate - 125 g (₹250)|250.00|0
+Instant Coffee Chocolate - 125 g (₹230)|230.00|0
+Instant Coffee Ginger - 100 g (₹220)|220.00|2
+Instant Coffee Ginger - 100 g (₹230)|230.00|5
+Instant Coffee Masala 100 g (₹220)|220.00|6
+Instant Coffee Masala - 100 g (₹230)|230.00|3
+Instant Coffee Vanila - 150 g|200.00|11
+Kappa Puttupodi - 500 g|100.00|2
+Kasturi Turmeric - കസ്‌തൂരി മഞ്ഞൾ - 100 g|45.00|21
+Kasturi Turmeric Powder - കസ്‌തൂരി മഞ്ഞൾപ്പൊടി|175.00|31
+Kerala Sandal Soap Trio Classic|235.00|34
+Kudampuli - കുടംപുളി - 500 g (₹250)|250.00|5
+Kudampuli - കുടംപുളി - 500 g (₹200)|200.00|1
+Kudampuli - കുടംപുളി - 200 g|100.00|20
+Kundhirikkathiri - കുന്തിരിക്കതിരി|40.00|0
+Lemon Tea - 250 g|190.00|1
+Lemongrass Oil - പുൽ തൈലം - 100 ml|280.00|24
+Lemongrass Tea - 250 g|190.00|6
+Little Millet Flakes - ചാമ അവിൽ - 250 g|125.00|0
+Mango Candy - മാങ്ങ മിഠായി - 80 g|40.00|2
+Marayoor Jaggery - മറയൂർ ശർക്കര - 1 Kg|160.00|0
+Masala Tea 250 g|190.00|0
+Manikunthirikkam - മണി കുന്തിരിക്കം - 200 g|140.00|20
+Mint Tea 250 g|190.00|0
+Multani Mitti Powder - മുൾട്ടാനി മിട്ടി പൊടി - 125 gm|100.00|6
+Naikarunappodi - നായ്ക്കരുണപ്പൊടി - 100 g|170.00|3
+Nannari Sherbet - നന്നാറി സർബത്ത് - 500 ml|125.00|14
+Nalpamaram Powder - നാൽപാമരം പൊടി - 125 gm|150.00|21
+Njerinjil - ഞെരിഞ്ഞിൽ - 50 g|40.00|0
+Nut Mug - ജാതിക്ക - 50 g|50.00|1
+Pain Oil - കാട്ടുതൈലം - 100 ml (₹125)|125.00|0
+Pain Oil - കാട്ടുതൈലം - 100 ml (₹140)|140.00|2
+Pain Oil - വേദന സംഹാരി - 100 ml|190.00|3
+Palm Sugar - പനം കൽക്കണ്ട് - 200 gm|275.00|12
+Panam kalkkandam - പനം കൽക്കണ്ട് - 200 g|240.00|0
+Passion Fruit Squash-പാഷൻ ഫ്രൂട്ട് സ്ക്വാഷ് - 500 ml|165.00|16
+Pathimugham - പതിമുഖം - 100 g|50.00|22
+Pathimugham - പതിമുഖം - 50 g|25.00|22
+Pathimugham - പതിമുഖം - 20 g|10.00|23
+Pen Stand|350.00|1
+Puliyoor Hair Oil - പുലിയൂർ ഹെയർ ഓയിൽ - 100 ml|390.00|12
+Pure Marayoor Sandal Powder - 20 gm|450.00|7
+Ramacham - 25 g (₹35)|35.00|0
+Ramacham - 25 g (₹50)|50.00|3
+Ramacham - രാമച്ചം - 50 g (₹80)|80.00|15
+Ramacham - 50 g (₹75)|75.00|0
+Red Sandalwood - രക്ത ചന്ദനക്കട്ട - 100 g|200.00|30
+Red Sandalwood - രക്ത ചന്ദനക്കട്ട - 20 g|50.00|24
+Red Sandalwood - രക്ത ചന്ദനക്കട്ട - 50 g|100.00|15
+Red Sandalwood bracelet - 10 MM|375.00|1
+Red Sandalwood bracelet - 12 MM|425.00|1
+Red Sandalwood bracelet - 3 Round - 7 MM|350.00|0
+Red Sandalwood bracelet - 3 Round - 8 MM|400.00|2
+Red Sandalwood bracelet - 6 MM|120.00|0
+Red Sandalwood bracelet - 7 MM|150.00|4
+Red Sandalwood bracelet - 8 MM|200.00|1
+Red Sandalwood Mala - 6 MM (₹175)|175.00|5
+Red Sandalwood Mala - 6 MM (₹225)|225.00|2
+Red Sandalwood Mala - 7 MM|300.00|3
+Red Sandalwood Mala - 8 MM|325.00|2
+Red sandalwood Powder - രക്ത ചന്ദനപ്പൊടി - 100 g (₹180)|180.00|0
+Red sandalwood Powder - 100 g (₹220)|220.00|6
+Red sandalwood Powder - രക്ത ചന്ദനപ്പൊടി - 50 g (₹100)|100.00|0
+Red sandalwood Powder - 50 g (₹125)|125.00|26
+Red sandal Soap - 100 g (₹80)|80.00|0
+Red sandal Soap - 100 g (₹70)|70.00|8
+Red sandal Soap - 150 g|90.00|20
+Red sandal Soap - 75 g (₹60)|60.00|0
+Red sandal Soap - 75 g (₹55)|55.00|21
+Rose Tea 250 g|190.00|0
+Rose Petal Powder - റോസാപൂ പൊടി - 100 g|175.00|14
+Rose mary Tea - റോസ് മേരി റ്റീ - 250 gm|190.00|3
+Rose Water - 100 ml|125.00|8
+Rose Water - റോസ് വാട്ടർ - 200 ml|200.00|10
+Rosemary Water - റോസ് മേരി വാട്ടർ - 100 ml|125.00|8
+Rosemary Water - റോസ് മേരി വാട്ടർ - 200 ml|200.00|0
+Rosted Ragi Avil - റാഗി അവിൽ - 400 g|125.00|2
+Samkhili Agarbatti (₹60)|60.00|0
+Samkhili Agarbatti (₹40)|40.00|4
+Samkhili Agarbatti (₹20)|20.00|7
+Sandalwood Oil - 2 g|1000.00|0
+Small Honey - ചെറുതേൻ - 200 g|400.00|7
+Small Honey - ചെറുതേൻ - 300 g|600.00|22
+Small Honey - ചെറുതേൻ - 500 g|1000.00|14
+Soap|30.00|0
+Star anise - തക്കോലം - 50 g|50.00|0
+Strawberry Tea - 250 g|190.00|6
+Sulaimani Tea - 250 g|210.00|0
+Tea Cup|130.00|0
+Thulasi Tea 250 g|190.00|0
+Turmeric - കറി മഞ്ഞൾ - 100 g|50.00|11
+Vanilla Tea - 250 g|190.00|5
+Vathamukthi Oil - വാതമുക്തി തൈലം - 100 ml|150.00|5
+Vatti (₹105)|105.00|2
+Vatti (₹115)|115.00|5
+Vatti (₹130)|130.00|3
+Vatti (₹145)|145.00|5
+Vatti (₹160)|160.00|7
+Vatti (₹170)|170.00|7
+Vatti (₹175)|175.00|1
+Vatti (₹185)|185.00|2
+Vatti (₹200)|200.00|1
+Vetiver Oil (രാമച്ച തൈലം) - 6 ml|675.00|10
+White Dammer - വെള്ള കുന്തിരിക്കം - 200 g (₹225)|225.00|0
+White Dammer - വെള്ള കുന്തിരിക്കം - 200 g (₹120)|120.00|1
+Wooden elephant figure - 2"|140.00|0
+Wooden elephant figure - 3"|175.00|0
+Wooden elephant figure - 4"|325.00|4
+Wooden elephant figure - 5"|625.00|3
+Wooden elephant figure - 6"|750.00|3
+Wooden elephant figure - 8"|1725.00|1
+Wooden elephant figure - 10"|3125.00|2
+Wooden elephant figure - 12"|5100.00|1
+Wooden elephant figure - 14"|8400.00|0
+Wooden elephant figure - 16"|14000.00|0
+Wooden Frame|135.00|1
+തേൻ മുളക് അച്ചാർ|100.00|1
+വയനാടൻ കണ്ണിമാങ്ങ അച്ചാർ|120.00|1
+വയനാടൻ കണ്ണിമാങ്ങ ഉപ്പിലിട്ടത്|90.00|0
+രാമചന്ദനം|40.00|0
+മുല്ലതൈലം|40.00|2
+ഇലഞ്ഞി തൈലം|40.00|3
+      `.trim();
+
+      const lines = bulkText.split("\n").map(x => x.trim()).filter(Boolean);
+
+      const updates = {};
+      for (const line of lines) {
+        const parts = line.split("|");
+        if (parts.length < 3) continue;
+        const itemName = parts[0].trim();
+        const mrp = parseFloat(parts[1]) || 0;
+        const stock = parseInt(parts[2], 10) || 0;
+
+        const id = db.ref("Items").push().key;
+        updates["Items/" + id] = { id, itemName, mrp, stock };
+      }
+
+      db.ref().update(updates)
+        .then(() => showToast("All items imported", "success", 2200))
+        .catch(err => { console.error(err); showToast("Import failed", "error", 2500); });
+    }
+  </script>
+</body>
+</html>
