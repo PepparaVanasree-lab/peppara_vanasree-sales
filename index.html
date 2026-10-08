@@ -56,6 +56,9 @@
         <button class="menu-btn btn-add-sales" onclick="showSalesSubPage('addSalesPage')">ADD SALES DETAILS</button>
         <button class="menu-btn btn-edit-sales" onclick="showSalesSubPage('editSalesPage')">VIEW / EDIT SALES DETAILS</button>
         <button class="menu-btn btn-gen-pdf" onclick="showSalesSubPage('genPdfPage')">GENERATE MONTHLY PDF</button>
+        <div class="no-print" style="margin-top: 28px; padding-top: 14px; border-top: 1px dashed #c8e6c9; text-align: center; font-size: 13px; color: #546E7A; letter-spacing: 0.6px;">
+        Designed &amp; Developed by <span style="color: #2E7D32; font-weight: 800; font-size: 14px;">MITHUN C NAIR</span>
+      </div>
       </div>
 
       <!-- Manage Inventory -->
@@ -96,7 +99,7 @@
 
       <!-- Add Sales -->
       <div id="addSalesPage" class="sales-subpage">
-        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">🔙 Back to Menu</button>
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
         <h3>New Bill Entry</h3>
         <label>Date:</label>
         <input type="date" id="saleDate">
@@ -122,7 +125,7 @@
 
       <!-- Edit Sales -->
       <div id="editSalesPage" class="sales-subpage">
-        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">🔙 Back to Menu</button>
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
         <h3>View / Edit Sales</h3>
         <div class="flex-row">
           <input type="date" id="filterSaleDate" onchange="loadSalesList()" class="flex-item" style="flex:2;">
@@ -138,7 +141,7 @@
 
       <!-- Generate Monthly PDF -->
       <div id="genPdfPage" class="sales-subpage">
-        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">🔙 Back to Menu</button>
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
         <h3>Generate Monthly PDF Register</h3>
         <select id="pdfMonth">
           <option value="01">01 - January</option><option value="02">02 - February</option><option value="03">03 - March</option>
