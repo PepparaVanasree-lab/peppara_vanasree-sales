@@ -1,6 +1,10 @@
+// data.js
 // =========================
-// Bulk Import Data (189 Items)
+// Bulk Import Data (BULK_DATA) + Total Count
 // =========================
+// Format of each entry:
+// [ itemName (string), mrp (number), stock (number) ]
+
 const BULK_DATA = [
   ["3 in 1 Sandal Soap Famili Pack (₹174)", 174.00, 31], ["3 in 1 Sandal Soap Famili Pack (₹195)", 195.00, 0],
   ["Agasthya Hair Oil - അഗസ്‌ത്യ ഹെയർ ഓയിൽ - 100", 150.00, 11], ["Ajwain Seed - അയമോദകം - 80 g", 50.00, 4],
@@ -96,4 +100,12 @@ const BULK_DATA = [
   ["വയനാടൻ കണ്ണിമാങ്ങ ഉപ്പിലിട്ടത്", 90.00, 0], ["രാമചന്ദനം", 40.00, 0],
   ["മുല്ലതൈലം", 40.00, 2], ["ഇലഞ്ഞി തൈലം", 40.00, 3]
 ];
+
 const TOTAL_IMPORT_ITEMS = BULK_DATA.length;
+
+// Expose for debugging / safety across scripts (optional but useful)
+window.BULK_DATA = BULK_DATA;
+window.TOTAL_IMPORT_ITEMS = TOTAL_IMPORT_ITEMS;
+
+// Quick sanity log (helps confirm correct file is loaded)
+console.log("data.js loaded. BULK_DATA length =", TOTAL_IMPORT_ITEMS);

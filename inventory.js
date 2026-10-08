@@ -1,8 +1,30 @@
+// inventory.js
 // =========================
 // Inventory, Purchase, Return & Bulk Import
 // =========================
-let currentStockModalMode = "purchase"; // "purchase" or "return"
 
+let currentStockModalMode = "purchase"; // "purchase" | "return"
+let itemsListener = null;
+
+// Small helpers
+const normalizeName = (s) => (s || "").trim();
+const toInt = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.trunc(n));
+};
+const toMoney = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return n;
+};
+// Prevent HTML injection in table rendering (optional but safer)
+const escHtml = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
+
+// =========================
+// Inventory Search Filter
+// =========================
 function filterItems() {
   const input = document.getElementById("searchItem").value.toUpperCase();
   const trs = document.getElementById("invTable").getElementsByTagName("tr");
@@ -15,46 +37,50 @@ function filterItems() {
   }
 }
 
+// =========================
+// Load Items + Render Inventory
+// =========================
 function loadItemsFromFirebase() {
-  db.ref("Items").on("value", async snapshot => {
+  // Detach previous listener (avoid duplicate listeners)
+  if (itemsListener) db.ref("Items").off("value", itemsListener);
+
+  itemsListener = async (snapshot) => {
     const addSalesSelect = document.getElementById("salesItemSelect");
     const invBody = document.getElementById("inventoryListBody");
     const importBtn = document.getElementById("importBtn");
+
+    // Keep current selected item if possible
+    const prevSelected = addSalesSelect.value;
 
     addSalesSelect.innerHTML = "";
     invBody.innerHTML = "";
     itemsData = {};
 
-    let list = [];
-    snapshot.forEach(child => {
-      const itemVal = child.val();
-      if (itemVal && itemVal.itemName) {
-        list.push(itemVal);
+    // Build itemsData map (unique by trimmed name)
+    snapshot.forEach((child) => {
+      const item = child.val();
+      if (!item || !item.itemName) return;
+
+      item.id = item.id || child.key; // Guarantee id exists
+
+      const cleanName = normalizeName(item.itemName);
+      const stockNum = toInt(item.stock);
+      const mrpNum = toMoney(item.mrp);
+
+      // Detect duplicates (same name, different IDs)
+      if (itemsData[cleanName] && itemsData[cleanName].id !== item.id) {
+        console.warn("Duplicate itemName in DB:", cleanName, itemsData[cleanName].id, item.id);
       }
-    });
 
-    list.sort((a, b) => (a.itemName || "").localeCompare((b.itemName || "")));
-
-    if (list.length >= TOTAL_IMPORT_ITEMS) {
-      importBtn.style.display = "none";
-    } else {
-      importBtn.style.display = "block";
-      importBtn.disabled = false;
-      importBtn.innerText = list.length === 0
-        ? "⚡ IMPORT ALL ITEMS"
-        : `⚡ IMPORT REMAINING ITEMS (${list.length}/${TOTAL_IMPORT_ITEMS})`;
-    }
-
-    for (const item of list) {
-      const stockNum = (typeof item.stock === "number") ? item.stock : (parseInt(item.stock, 10) || 0);
-      const mrpNum   = (typeof item.mrp === "number") ? item.mrp : (parseFloat(item.mrp) || 0);
-
+      item.itemName = cleanName;
       item.baseStock = stockNum;
       item.stock = stockNum;
       item.mrp = mrpNum;
-      itemsData[item.itemName] = item;
-    }
 
+      itemsData[cleanName] = item;
+    });
+
+    // Apply pending-queue stock delta (offline ops)
     const summary = await getPendingSummary();
     for (const name in itemsData) {
       const it = itemsData[name];
@@ -62,13 +88,38 @@ function loadItemsFromFirebase() {
       it.stock = Math.max(0, (it.baseStock || 0) + delta);
     }
 
-    for (const raw of list) {
-      const it = itemsData[raw.itemName];
-      if (!it) continue;
+    // Import button logic based on missing BULK items
+    const bulk = (typeof BULK_DATA !== "undefined" && Array.isArray(BULK_DATA)) ? BULK_DATA : [];
+    const existing = new Set(Object.keys(itemsData).map(normalizeName));
+    const missingCount = bulk.filter((x) => !existing.has(normalizeName(x[0]))).length;
 
+    if (!bulk.length) {
+      // If BULK_DATA not loaded, hide button to avoid errors
+      importBtn.style.display = "none";
+    } else if (missingCount === 0) {
+      importBtn.style.display = "none";
+    } else {
+      importBtn.style.display = "block";
+      importBtn.disabled = false;
+      importBtn.innerText =
+        missingCount === TOTAL_IMPORT_ITEMS
+          ? "⚡ IMPORT ALL ITEMS"
+          : `⚡ IMPORT REMAINING ITEMS (${missingCount} left)`;
+    }
+
+    // Render UI from unique sorted names
+    const names = Object.keys(itemsData).sort((a, b) => a.localeCompare(b));
+
+    let rowsHtml = "";
+    for (const name of names) {
+      const it = itemsData[name];
+
+      // Dropdown is safe (no HTML parsing)
       addSalesSelect.add(new Option(it.itemName, it.itemName));
-      invBody.innerHTML += `<tr>
-        <td style="text-align:left;">${it.itemName}</td>
+
+      // Table rows (escape itemName)
+      rowsHtml += `<tr>
+        <td style="text-align:left;">${escHtml(it.itemName)}</td>
         <td style="font-weight:bold;">${it.stock}</td>
         <td>₹${Number(it.mrp).toFixed(2)}</td>
         <td>
@@ -77,10 +128,21 @@ function loadItemsFromFirebase() {
         </td>
       </tr>`;
     }
+
+    invBody.innerHTML = rowsHtml;
+
+    // Restore previous selection if still exists
+    if (prevSelected && itemsData[prevSelected]) addSalesSelect.value = prevSelected;
+
     updateSalesStockDetails();
-  });
+  };
+
+  db.ref("Items").on("value", itemsListener);
 }
 
+// =========================
+// Bulk Import (Safe One-by-One + Progress + Listener Pause)
+// =========================
 async function bulkImportItems() {
   if (!isConnected) {
     showToast("Import ചെയ്യാൻ Internet വേണം (Online ആകുക)", "error", 3000);
@@ -92,83 +154,111 @@ async function bulkImportItems() {
   const originalText = importBtn.innerText;
   importBtn.disabled = true;
 
-  // ഇമ്പോർട്ട് നടക്കുമ്പോൾ ടേബിൾ വീണ്ടും വരച്ച് സ്ലോ ആകാതിരിക്കാൻ ലിസണർ താൽക്കാലികമായി നിർത്തുന്നു
-  db.ref("Items").off("value");
+  // Pause listener during import (prevents re-render lag)
+  if (itemsListener) db.ref("Items").off("value", itemsListener);
 
   try {
-    // ഡാറ്റാബേസിൽ നിലവിലുള്ള ഐറ്റങ്ങൾ നേരിട്ട് പരിശോധിക്കുന്നു
+    if (typeof BULK_DATA === "undefined" || !Array.isArray(BULK_DATA) || BULK_DATA.length === 0) {
+      alert("BULK_DATA is missing. Please check data.js loading.");
+      return;
+    }
+
+    // Read existing names from DB (resume-safe)
     const snap = await db.ref("Items").once("value");
     const existingNames = new Set();
-    snap.forEach(c => {
+    snap.forEach((c) => {
       const val = c.val();
-      if (val && val.itemName) existingNames.add(val.itemName);
+      if (val && val.itemName) existingNames.add(normalizeName(val.itemName));
     });
 
-    const toImport = BULK_DATA.filter(x => !existingNames.has(x[0]));
+    const toImport = BULK_DATA.filter((x) => !existingNames.has(normalizeName(x[0])));
 
     if (toImport.length === 0) {
-      showToast("All items already imported!", "success");
+      showToast("All items already imported!", "success", 2200);
       importBtn.style.display = "none";
       return;
     }
 
+    importBtn.innerText = `⏳ Importing... 0 / ${toImport.length}`;
+
     let done = 0;
     for (const it of toImport) {
-      const itemId = db.ref("Items").push().key;
-      await db.ref("Items/" + itemId).set({
-        id: itemId,
-        itemName: it[0],
-        mrp: parseFloat(it[1]) || 0,
-        stock: parseInt(it[2], 10) || 0
-      });
+      try {
+        const itemId = db.ref("Items").push().key;
+        await db.ref("Items/" + itemId).set({
+          id: itemId,
+          itemName: normalizeName(it[0]),
+          mrp: toMoney(it[1]),
+          stock: toInt(it[2])
+        });
+      } catch (itemErr) {
+        alert("Failed at item: " + it[0] + "\n" + (itemErr.message || itemErr));
+        throw itemErr;
+      }
 
       done++;
-      importBtn.innerText = `⏳ Importing... ${done} / ${toImport.length}`;
+
+      // Update UI progress every 5 items
+      if (done % 5 === 0 || done === toImport.length) {
+        importBtn.innerText = `⏳ Importing... ${done} / ${toImport.length}`;
+      }
+
+      // Yield occasionally to keep UI responsive
+      if (done % 10 === 0) await new Promise((r) => setTimeout(r, 0));
     }
 
     showToast(`വിജയകരം! ${done} ഐറ്റങ്ങളും സ്റ്റോക്കിൽ ആഡ് ചെയ്തു.`, "success", 3000);
     importBtn.style.display = "none";
+
   } catch (e) {
     console.error("Import error:", e);
-    showToast("Import failed: " + e.message, "error", 5000);
+    showToast("Import failed: " + (e.message || e), "error", 5000);
+
   } finally {
     importBtn.disabled = false;
     importBtn.innerText = originalText;
-    // ഇമ്പോർട്ട് കഴിഞ്ഞ ഉടൻ ലിസണർ തിരികെ ഓൺ ആക്കുന്നു
+
+    // Re-attach listener
     loadItemsFromFirebase();
   }
 }
 
+// =========================
+// Inventory CRUD
+// =========================
 function addNewInvItem() {
-  const name = document.getElementById("invNewName").value.trim();
-  const stock = parseInt(document.getElementById("invNewStock").value, 10) || 0;
-  const mrp = parseFloat(document.getElementById("invNewMrp").value) || 0;
+  const name = normalizeName(document.getElementById("invNewName").value);
+  const stock = toInt(document.getElementById("invNewStock").value);
+  const mrp = toMoney(document.getElementById("invNewMrp").value);
 
   if (!name || !mrp) { alert("ഐറ്റത്തിന്റെ പേരും വിലയും നിർബന്ധമാണ്!"); return; }
   if (itemsData[name]) { alert("ഈ ഐറ്റം നിലവിലുണ്ട്!"); return; }
 
   const itemId = db.ref("Items").push().key;
-  db.ref("Items/" + itemId).set({ id: itemId, itemName: name, stock: stock, mrp: mrp })
+  db.ref("Items/" + itemId).set({ id: itemId, itemName: name, stock, mrp })
     .then(() => {
       document.getElementById("invNewName").value = "";
       document.getElementById("invNewStock").value = "";
       document.getElementById("invNewMrp").value = "";
       showToast("Item added", "success");
-    }).catch(() => showToast("Failed to add", "error"));
+    })
+    .catch(() => showToast("Failed to add", "error"));
 }
 
 function editInvItem(id, currentName, currentStock, currentMrp) {
   const newName = prompt("പുതിയ പേര് നൽകുക:", currentName);
-  if (newName === null || newName.trim() === "") return;
+  if (newName === null || normalizeName(newName) === "") return;
+
   const newStock = prompt("സ്റ്റോക്ക് എത്രയാണ്?", currentStock);
   if (newStock === null) return;
+
   const newMrp = prompt("പുതിയ MRP നൽകുക:", currentMrp);
   if (newMrp === null) return;
 
   db.ref("Items/" + id).update({
-    itemName: newName.trim(),
-    stock: parseInt(newStock, 10) || 0,
-    mrp: parseFloat(newMrp) || 0
+    itemName: normalizeName(newName),
+    stock: toInt(newStock),
+    mrp: toMoney(newMrp)
   }).then(() => showToast("വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു!", "success"));
 }
 
@@ -220,7 +310,8 @@ function openStockModal(mode) {
 function populateModalDropdown(filterText) {
   const select = document.getElementById("modalItemSelect");
   select.innerHTML = "";
-  const q = (filterText || "").trim().toUpperCase();
+
+  const q = normalizeName(filterText).toUpperCase();
   const names = Object.keys(itemsData || {}).sort((a, b) => a.localeCompare(b));
 
   for (const name of names) {
@@ -270,8 +361,8 @@ async function submitStockModal() {
     return;
   }
 
-  const qty = parseInt(document.getElementById("modalQtyInput").value, 10);
-  if (isNaN(qty) || qty <= 0) {
+  const qty = toInt(document.getElementById("modalQtyInput").value);
+  if (!qty) {
     alert("ശരിയായ എണ്ണം (Quantity) നൽകുക!");
     return;
   }
@@ -281,14 +372,17 @@ async function submitStockModal() {
     alert("തീയതി തിരഞ്ഞെടുക്കുക!");
     return;
   }
+
   const monthKey = dateInput.substring(0, 7);
 
   if (currentStockModalMode === "purchase") {
-    const currentMrp = parseFloat(itemsData[name].mrp) || 0;
-    const newMrp = parseFloat(document.getElementById("modalMrpInput").value) || currentMrp;
+    const currentMrp = toMoney(itemsData[name].mrp);
+    const enteredMrp = toMoney(document.getElementById("modalMrpInput").value);
+    const newMrp = enteredMrp || currentMrp;
+
     let targetItem = itemsData[name];
 
-    // വില വ്യത്യാസമുണ്ടെങ്കിൽ പുതിയ വില ബ്രാക്കറ്റിൽ ചേർത്ത് പ്രത്യേക ഐറ്റമായി ക്രമീകരിക്കുന്നു
+    // If MRP changed, create/use a variant name "(₹NEW)"
     if (newMrp !== currentMrp) {
       const baseName = name.replace(/\s*\(₹\d+(\.\d+)?\)\s*$/, "").trim();
       const variantName = `${baseName} (₹${newMrp})`;
@@ -303,7 +397,9 @@ async function submitStockModal() {
         }
         const newItemId = db.ref("Items").push().key;
         const newItemObj = { id: newItemId, itemName: variantName, stock: 0, baseStock: 0, mrp: newMrp };
+
         await db.ref("Items/" + newItemId).set({ id: newItemId, itemName: variantName, stock: 0, mrp: newMrp });
+
         itemsData[variantName] = newItemObj;
         targetItem = newItemObj;
         name = variantName;
@@ -314,19 +410,25 @@ async function submitStockModal() {
     const data = { date: dateInput, itemName: name, quantity: qty, mrp: newMrp };
 
     await queuePut({
-      opId: "purchase:" + purchaseId, type: "purchase", monthKey, purchaseId,
-      itemId: targetItem.id, itemName: name, qty, data
+      opId: "purchase:" + purchaseId,
+      type: "purchase",
+      monthKey,
+      purchaseId,
+      itemId: targetItem.id,
+      itemName: name,
+      qty,
+      data
     });
 
-    targetItem.stock = (parseInt(targetItem.stock, 10) || 0) + qty;
+    targetItem.stock = (toInt(targetItem.stock) || 0) + qty;
     updateSalesStockDetails();
     closeStockModal();
     showToast(`Purchase added: ${name} (+${qty})`, "success", 2500);
     syncPendingOps();
 
   } else {
-    // Return Stock Mode
-    if (qty > itemsData[name].stock) {
+    // Return mode
+    if (qty > toInt(itemsData[name].stock)) {
       alert("സ്റ്റോക്കിനേക്കാൾ കൂടുതൽ Return നൽകാൻ കഴിയില്ല!");
       return;
     }
@@ -335,11 +437,17 @@ async function submitStockModal() {
     const data = { date: dateInput, itemName: name, quantity: qty };
 
     await queuePut({
-      opId: "return:" + returnId, type: "return", monthKey, returnId,
-      itemId: itemsData[name].id, itemName: name, qty, data
+      opId: "return:" + returnId,
+      type: "return",
+      monthKey,
+      returnId,
+      itemId: itemsData[name].id,
+      itemName: name,
+      qty,
+      data
     });
 
-    itemsData[name].stock = Math.max(0, itemsData[name].stock - qty);
+    itemsData[name].stock = Math.max(0, toInt(itemsData[name].stock) - qty);
     updateSalesStockDetails();
     closeStockModal();
     showToast(`Return saved: ${name} (-${qty})`, "success", 2500);
