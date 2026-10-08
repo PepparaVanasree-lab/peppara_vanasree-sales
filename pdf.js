@@ -116,11 +116,6 @@ function setPrintMode(mode) {
   }
 }
 
-/**
- * Auto-fit content on preview/print area:
- * - cashbook: fit both width & height to single A4 portrait page
- * - monthly: fit width ONLY to A4 landscape (so 189 rows don't shrink into unreadable tiny text)
- */
 function _applyAutoFit(mode) {
   const wrap = document.querySelector("#printArea .print-wrap");
   if (!wrap) return;
@@ -142,7 +137,7 @@ function _applyAutoFit(mode) {
     scale = Math.min(1, maxW / contentW, maxH / contentH);
   } else {
     const maxW = A4_LAND_W - 20;
-    scale = Math.min(1, maxW / contentW); // Fit width only for 189 items
+    scale = Math.min(1, maxW / contentW);
   }
 
   try {
@@ -158,7 +153,7 @@ function showPrintPreview(contentHtml, mode) {
 
   const toolbarHtml = `
     <div class="preview-toolbar no-print">
-      <button class="btn-close-preview" onclick="closePrintPreview()">🔙 Back to App</button>
+      <button class="btn-close-preview" onclick="closePrintPreview()">⬅ Back to App</button>
       <span style="font-size:16px; font-weight:bold;">📄 Print Preview</span>
       <button class="btn-do-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
     </div>
@@ -192,9 +187,6 @@ window.addEventListener("afterprint", () => {
   if (_pdfPreviewMode) _applyAutoFit(_pdfPreviewMode);
 });
 
-// =========================
-// Cashbook PDF (A4 Portrait)
-// =========================
 function printAdminPdf() {
   const rows = document.querySelectorAll("#cashBookBody tr");
   if (rows.length === 0) {
@@ -245,10 +237,18 @@ function printAdminPdf() {
   showPrintPreview(html, "cashbook");
 }
 
-// =========================
-// Monthly PDF (A4 Landscape)
-// =========================
 async function printWebPdf() {
+  await queueReady;
+  if (pendingCount > 0) {
+    if (isConnected) {
+      await syncPendingOps();
+    }
+    if (pendingCount > 0) {
+      alert("ശ്രദ്ധിക്കുക: ഓഫ്‌ലൈനിൽ സേവ് ചെയ്ത വിവരങ്ങൾ സിങ്ക് ആകാൻ ബാക്കിയുണ്ട്! ഇന്റർനെറ്റ് ഓൺ ആക്കി Sync പൂർത്തിയായ ശേഷം PDF എടുക്കുക.");
+      return;
+    }
+  }
+
   const m = document.getElementById("pdfMonth").value;
   const y = document.getElementById("pdfYear").value;
   const targetMonthKey = `${y}-${m}`;
@@ -271,7 +271,6 @@ async function printWebPdf() {
     const futureReturnsByItem = {};
     const futurePurchasesByItem = {};
 
-    // Sales
     sSnap.forEach((c) => {
       const v = c.val();
       if (!v || !v.date || !v.itemName) return;
@@ -295,7 +294,6 @@ async function printWebPdf() {
       }
     });
 
-    // Items (unique by trimmed name)
     iSnap.forEach((c) => {
       const it = c.val();
       if (it && it.itemName) {
@@ -306,7 +304,6 @@ async function printWebPdf() {
     });
     const iList = Object.values(uniqueItemsMap);
 
-    // Returns
     rAllSnap.forEach((monthNode) => {
       const mKey = monthNode.key;
       monthNode.forEach((c) => {
@@ -320,7 +317,6 @@ async function printWebPdf() {
       });
     });
 
-    // Purchases
     pAllSnap.forEach((monthNode) => {
       const mKey = monthNode.key;
       monthNode.forEach((c) => {

@@ -35,7 +35,7 @@ th { background: #2E7D32; color: white; }
 .btn-gen-pdf { background: #9C27B0; }
 .menu-btn:hover { opacity: 0.92; }
 
-.back-btn { background: #607D8B; color: white; width: auto; padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 15px; }
+.back-btn { background: #1976D2; color: white; width: auto; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 15px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
 .save-btn { background: #2E7D32; color: white; font-weight: bold; border: none; cursor: pointer; }
 .edit-btn { background: #FF9800; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 4px; margin-bottom: 5px; font-size: 13px; }
 .delete-btn { background: #d9534f; color: white; border: none; cursor: pointer; padding: 5px 10px; border-radius: 4px; font-size: 13px; }

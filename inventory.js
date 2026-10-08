@@ -18,7 +18,6 @@ const toMoney = (v) => {
   if (!Number.isFinite(n)) return 0;
   return n;
 };
-// Prevent HTML injection in table rendering (optional but safer)
 const escHtml = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
 
@@ -41,7 +40,6 @@ function filterItems() {
 // Load Items + Render Inventory
 // =========================
 function loadItemsFromFirebase() {
-  // Detach previous listener (avoid duplicate listeners)
   if (itemsListener) db.ref("Items").off("value", itemsListener);
 
   itemsListener = async (snapshot) => {
@@ -49,25 +47,22 @@ function loadItemsFromFirebase() {
     const invBody = document.getElementById("inventoryListBody");
     const importBtn = document.getElementById("importBtn");
 
-    // Keep current selected item if possible
     const prevSelected = addSalesSelect.value;
 
     addSalesSelect.innerHTML = "";
     invBody.innerHTML = "";
     itemsData = {};
 
-    // Build itemsData map (unique by trimmed name)
     snapshot.forEach((child) => {
       const item = child.val();
       if (!item || !item.itemName) return;
 
-      item.id = item.id || child.key; // Guarantee id exists
+      item.id = item.id || child.key;
 
       const cleanName = normalizeName(item.itemName);
       const stockNum = toInt(item.stock);
       const mrpNum = toMoney(item.mrp);
 
-      // Detect duplicates (same name, different IDs)
       if (itemsData[cleanName] && itemsData[cleanName].id !== item.id) {
         console.warn("Duplicate itemName in DB:", cleanName, itemsData[cleanName].id, item.id);
       }
@@ -80,7 +75,7 @@ function loadItemsFromFirebase() {
       itemsData[cleanName] = item;
     });
 
-    // Apply pending-queue stock delta (offline ops)
+    await queueReady;
     const summary = await getPendingSummary();
     for (const name in itemsData) {
       const it = itemsData[name];
@@ -88,36 +83,30 @@ function loadItemsFromFirebase() {
       it.stock = Math.max(0, (it.baseStock || 0) + delta);
     }
 
-    // Import button logic based on missing BULK items
     const bulk = (typeof BULK_DATA !== "undefined" && Array.isArray(BULK_DATA)) ? BULK_DATA : [];
+    const total = (typeof TOTAL_IMPORT_ITEMS !== "undefined") ? TOTAL_IMPORT_ITEMS : bulk.length;
     const existing = new Set(Object.keys(itemsData).map(normalizeName));
     const missingCount = bulk.filter((x) => !existing.has(normalizeName(x[0]))).length;
 
-    if (!bulk.length) {
-      // If BULK_DATA not loaded, hide button to avoid errors
-      importBtn.style.display = "none";
-    } else if (missingCount === 0) {
+    if (!bulk.length || missingCount === 0) {
       importBtn.style.display = "none";
     } else {
       importBtn.style.display = "block";
       importBtn.disabled = false;
       importBtn.innerText =
-        missingCount === TOTAL_IMPORT_ITEMS
+        missingCount === total
           ? "⚡ IMPORT ALL ITEMS"
           : `⚡ IMPORT REMAINING ITEMS (${missingCount} left)`;
     }
 
-    // Render UI from unique sorted names
     const names = Object.keys(itemsData).sort((a, b) => a.localeCompare(b));
 
     let rowsHtml = "";
     for (const name of names) {
       const it = itemsData[name];
 
-      // Dropdown is safe (no HTML parsing)
       addSalesSelect.add(new Option(it.itemName, it.itemName));
 
-      // Table rows (escape itemName)
       rowsHtml += `<tr>
         <td style="text-align:left;">${escHtml(it.itemName)}</td>
         <td style="font-weight:bold;">${it.stock}</td>
@@ -131,7 +120,6 @@ function loadItemsFromFirebase() {
 
     invBody.innerHTML = rowsHtml;
 
-    // Restore previous selection if still exists
     if (prevSelected && itemsData[prevSelected]) addSalesSelect.value = prevSelected;
 
     updateSalesStockDetails();
@@ -154,7 +142,6 @@ async function bulkImportItems() {
   const originalText = importBtn.innerText;
   importBtn.disabled = true;
 
-  // Pause listener during import (prevents re-render lag)
   if (itemsListener) db.ref("Items").off("value", itemsListener);
 
   try {
@@ -163,7 +150,6 @@ async function bulkImportItems() {
       return;
     }
 
-    // Read existing names from DB (resume-safe)
     const snap = await db.ref("Items").once("value");
     const existingNames = new Set();
     snap.forEach((c) => {
@@ -198,12 +184,10 @@ async function bulkImportItems() {
 
       done++;
 
-      // Update UI progress every 5 items
       if (done % 5 === 0 || done === toImport.length) {
         importBtn.innerText = `⏳ Importing... ${done} / ${toImport.length}`;
       }
 
-      // Yield occasionally to keep UI responsive
       if (done % 10 === 0) await new Promise((r) => setTimeout(r, 0));
     }
 
@@ -217,8 +201,6 @@ async function bulkImportItems() {
   } finally {
     importBtn.disabled = false;
     importBtn.innerText = originalText;
-
-    // Re-attach listener
     loadItemsFromFirebase();
   }
 }
@@ -355,6 +337,8 @@ function returnStockPrompt() {
 }
 
 async function submitStockModal() {
+  await queueReady;
+
   let name = document.getElementById("modalItemSelect").value;
   if (!name || !itemsData[name]) {
     alert("ദയവായി ഒരു ഐറ്റം തിരഞ്ഞെടുക്കുക!");
@@ -382,7 +366,6 @@ async function submitStockModal() {
 
     let targetItem = itemsData[name];
 
-    // If MRP changed, create/use a variant name "(₹NEW)"
     if (newMrp !== currentMrp) {
       const baseName = name.replace(/\s*\(₹\d+(\.\d+)?\)\s*$/, "").trim();
       const variantName = `${baseName} (₹${newMrp})`;
@@ -420,14 +403,11 @@ async function submitStockModal() {
       data
     });
 
-    targetItem.stock = (toInt(targetItem.stock) || 0) + qty;
-    updateSalesStockDetails();
     closeStockModal();
     showToast(`Purchase added: ${name} (+${qty})`, "success", 2500);
     syncPendingOps();
 
   } else {
-    // Return mode
     if (qty > toInt(itemsData[name].stock)) {
       alert("സ്റ്റോക്കിനേക്കാൾ കൂടുതൽ Return നൽകാൻ കഴിയില്ല!");
       return;
@@ -447,8 +427,6 @@ async function submitStockModal() {
       data
     });
 
-    itemsData[name].stock = Math.max(0, toInt(itemsData[name].stock) - qty);
-    updateSalesStockDetails();
     closeStockModal();
     showToast(`Return saved: ${name} (-${qty})`, "success", 2500);
     syncPendingOps();

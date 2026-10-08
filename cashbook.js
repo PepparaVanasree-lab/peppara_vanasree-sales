@@ -1,23 +1,18 @@
 // cashbook.js
-// =========================
-// Cashbook & Remittance (with pending overlay)
-// =========================
-
-// small helper
 const _num = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
 
-// Load Cash Book table + Summary
 async function loadAdminData() {
-  const month = document.getElementById("adminMonth").value; // "01".."12"
+  const month = document.getElementById("adminMonth").value;
   const year = document.getElementById("adminYear").value;
 
   const tbody = document.getElementById("cashBookBody");
   tbody.innerHTML = "";
 
   const days = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+  await queueReady;
   const summary = await getPendingSummary();
 
   let totalIncome = 0;
@@ -25,7 +20,6 @@ async function loadAdminData() {
   let totalPendingIncome = 0;
   let pendingRemitCount = 0;
 
-  // Fetch server-side totals once
   const [salesSnap, remitSnap] = await Promise.all([
     db.ref("DailySales").once("value"),
     db.ref("Remittances").once("value")
@@ -35,15 +29,13 @@ async function loadAdminData() {
 
   for (let i = 1; i <= days; i++) {
     const dayStr = String(i).padStart(2, "0");
-    const dateKey = `${dayStr}-${month}-${year}`;    // dd-mm-yyyy
-    const displayDate = `${dayStr}/${month}/${year}`; // dd/mm/yyyy
+    const dateKey = `${dayStr}-${month}-${year}`;
+    const displayDate = `${dayStr}/${month}/${year}`;
 
-    // Income = server + pending (queued sales/deletes not yet synced)
     const incomeServer = _num(salesSnap.child(dateKey).val());
     const incomePending = _num(summary.pendingIncomeByDateKey[dateKey]);
     const incomeTotal = incomeServer + incomePending;
 
-    // Remittance = server OR pending overwrite (queued editRemittance not yet synced)
     const serverNode = remitSnap.child(dateKey).val() || {};
     let remitAmt = _num(serverNode.amount);
     let remitRemarks = (serverNode.remarks || "");
@@ -94,7 +86,6 @@ async function loadAdminData() {
   await calculateAbstractBalance(month, year, totalIncome, totalRemit);
 }
 
-// Summary calculation (Opening + Income - Remit)
 async function calculateAbstractBalance(month, year, income, remit) {
   const m = parseInt(month, 10);
   const y = parseInt(year, 10);
@@ -102,8 +93,8 @@ async function calculateAbstractBalance(month, year, income, remit) {
   const prevMonth = (m === 1) ? 12 : (m - 1);
   const prevYear  = (m === 1) ? (y - 1) : y;
 
-  const prevKey = `${String(prevMonth).padStart(2, "0")}-${prevYear}`; // MM-YYYY
-  const curKey  = `${String(m).padStart(2, "0")}-${y}`;               // MM-YYYY
+  const prevKey = `${String(prevMonth).padStart(2, "0")}-${prevYear}`;
+  const curKey  = `${String(m).padStart(2, "0")}-${y}`;
 
   const snap = await db.ref("Balances/" + prevKey + "/closingBalance").once("value");
   const opening = _num(snap.val());
@@ -112,19 +103,17 @@ async function calculateAbstractBalance(month, year, income, remit) {
   document.getElementById("abOpening").innerText = `₹ ${opening.toFixed(2)}`;
   document.getElementById("abClosing").innerText = `₹ ${closing.toFixed(2)}`;
 
-  // Persist closing balance only when online AND no pending ops
   if (isConnected && pendingCount === 0) {
     db.ref("Balances/" + curKey + "/closingBalance").set(closing);
   }
 }
 
-// Remittance edit: store to offline queue + trigger sync
 async function editRemittance(dateKey, oldAmt, oldRemarks) {
   const amtStr = prompt(`Enter remitted amount (${dateKey}):`, oldAmt > 0 ? oldAmt : "");
   if (amtStr === null) return;
 
   const remarks = prompt("Remarks:", oldRemarks || "");
-  if (remarks === null) return; // user cancelled
+  if (remarks === null) return;
 
   const data = { amount: _num(amtStr), remarks: remarks || "" };
 

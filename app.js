@@ -30,7 +30,7 @@ const queueReady = new Promise((resolve) => (_queueReadyResolve = resolve));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // =========================
-// Toast
+// Toast & Button Flash
 // =========================
 let toastTimer = null;
 function showToast(msg, type = "info", ms = 2000) {
@@ -65,7 +65,7 @@ function flashButton(btn, { state = "success", text = "✔ Done!", ms = 1500 } =
 }
 
 // =========================
-// Net badge
+// Net Badge & Connection Monitor
 // =========================
 function updateNetBadge() {
   const el = document.getElementById("netStatus");
@@ -137,8 +137,8 @@ async function queueInit() {
   } catch {
     queueDb = null;
   }
-  await refreshPendingCount();
   _queueReadyResolve?.();
+  await refreshPendingCount();
 }
 
 function lsReadAllMap() {
@@ -151,7 +151,6 @@ function lsWriteAllMap(map) {
 async function queuePut(op) {
   op.createdAt = op.createdAt || Date.now();
 
-  // localStorage fallback
   if (!queueDb) {
     const map = lsReadAllMap();
     map[op.opId] = op;
@@ -170,7 +169,6 @@ async function queuePut(op) {
 }
 
 async function queueGetAll() {
-  // localStorage fallback
   if (!queueDb) {
     const arr = Object.values(lsReadAllMap());
     arr.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
@@ -231,6 +229,22 @@ async function queueCount() {
 async function refreshPendingCount() {
   pendingCount = await queueCount();
   updateNetBadge();
+
+  if (itemsData && Object.keys(itemsData).length > 0) {
+    try {
+      const summary = await getPendingSummary();
+      for (const name in itemsData) {
+        const it = itemsData[name];
+        const delta = summary.stockDeltaByItemId[it.id] || 0;
+        it.stock = Math.max(0, (it.baseStock || 0) + delta);
+      }
+      if (typeof updateSalesStockDetails === "function") {
+        updateSalesStockDetails();
+      }
+    } catch (e) {
+      console.error("Stock refresh error:", e);
+    }
+  }
 }
 
 async function getPendingSummary() {
@@ -246,8 +260,11 @@ async function getPendingSummary() {
     if (op.type === "sale") {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
 
-      pendingSalesByDate[op.saleData.date] = pendingSalesByDate[op.saleData.date] || [];
-      pendingSalesByDate[op.saleData.date].push(op);
+      const d = op.saleData && op.saleData.date;
+      if (d) {
+        pendingSalesByDate[d] = pendingSalesByDate[d] || [];
+        pendingSalesByDate[d].push(op);
+      }
 
       pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amount || 0);
 
@@ -255,10 +272,10 @@ async function getPendingSummary() {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
       pendingDeleteSaleIds.add(op.saleId);
       pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) - (op.amount || 0);
-     
+
     } else if (op.type === "editSale") {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qtyDiff || 0);
-      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amtDiff || 0);  
+      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amtDiff || 0);
 
     } else if (op.type === "return") {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
@@ -275,10 +292,9 @@ async function getPendingSummary() {
 }
 
 // =========================
-// Sync Operations (Atomic Multi-Location Updates)
+// Sync Operations (Atomic & Zero-Drift)
 // =========================
 async function syncPendingOps() {
-  // wait for queue init
   await queueReady;
 
   if (!isConnected || syncRunning) return;
@@ -299,7 +315,6 @@ async function syncPendingOps() {
         else if (op.type === "purchase") await syncPurchaseOp(op);
       } catch (e) {
         console.error("Sync failed for op:", op, e);
-        // stop loop; will retry later
         break;
       }
     }
@@ -310,35 +325,125 @@ async function syncPendingOps() {
   }
 }
 
+async function recalculateDailyTotal(formattedDate, dateKey) {
+  if (!formattedDate || !dateKey) return;
+  const snap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
+  let sum = 0;
+  snap.forEach((c) => {
+    const v = c.val();
+    if (v && v.amount) sum += Number(v.amount) || 0;
+  });
+  await db.ref("DailySales/" + dateKey).set(Number(sum.toFixed(2)));
+}
+
 async function syncSaleOp(op) {
   const exists = await db.ref("Sales/" + op.saleId).once("value");
   if (exists.exists()) { await queueDelete(op.opId); return; }
 
+  const formattedDate = op.formattedDate || (op.saleData && op.saleData.date);
+
+  const daySnap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
+  let existingServerSale = null;
+  let existingServerSaleId = null;
+  daySnap.forEach((c) => {
+    const s = c.val();
+    const sId = (s && s.id) || c.key;
+    if (s && sId !== op.saleId && (s.itemName || "").trim() === (op.itemName || "").trim()) {
+      if (!existingServerSale) {
+        existingServerSale = s;
+        existingServerSaleId = sId;
+      }
+    }
+  });
+
+  // Guard: do not merge into existingServerSaleId if a pending editSale or deleteSale exists for it
+  if (existingServerSaleId) {
+    const hasPendingEdit = await queueGet("editSale:" + existingServerSaleId);
+    const hasPendingDel = await queueGet("delSale:" + existingServerSaleId);
+    if (hasPendingEdit || hasPendingDel) {
+      existingServerSale = null;
+      existingServerSaleId = null;
+    }
+  }
+
   const updates = {};
-  updates["Sales/" + op.saleId] = op.saleData;
-  updates["DailySales/" + op.dateKey] = firebase.database.ServerValue.increment(op.amount);
+  if (existingServerSale && existingServerSaleId) {
+    const mergedQty = (Number(existingServerSale.quantity) || 0) + (Number(op.qty) || 0);
+    const mergedAmt = Number(((Number(existingServerSale.amount) || 0) + (Number(op.amount) || 0)).toFixed(2));
+    updates["Sales/" + existingServerSaleId + "/id"] = existingServerSaleId;
+    updates["Sales/" + existingServerSaleId + "/quantity"] = mergedQty;
+    updates["Sales/" + existingServerSaleId + "/amount"] = mergedAmt;
+  } else {
+    updates["Sales/" + op.saleId] = op.saleData;
+  }
   updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
 
-  await db.ref().update(updates);
   await queueDelete(op.opId);
+  try {
+    await db.ref().update(updates);
+    await recalculateDailyTotal(formattedDate, op.dateKey);
+  } catch (err) {
+    await queuePut(op);
+    throw err;
+  }
 }
 
 async function syncDeleteSaleOp(op) {
-  const exists = await db.ref("Sales/" + op.saleId).once("value");
-  if (!exists.exists()) { await queueDelete(op.opId); return; }
+  const snap = await db.ref("Sales/" + op.saleId).once("value");
+  if (!snap.exists()) { await queueDelete(op.opId); return; }
+
+  const actualServerSale = snap.val();
+  const itemId = actualServerSale.itemId || op.itemId;
+  const actualQtyToRestore = Number(actualServerSale.quantity) || op.qty || 0;
+  const formattedDate = op.formattedDate || actualServerSale.date;
 
   const updates = {};
   updates["Sales/" + op.saleId] = null;
-  updates["DailySales/" + op.dateKey] = firebase.database.ServerValue.increment(-op.amount);
-  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(+op.qty);
+  updates["Items/" + itemId + "/stock"] = firebase.database.ServerValue.increment(+actualQtyToRestore);
 
-  await db.ref().update(updates);
   await queueDelete(op.opId);
+  try {
+    await db.ref().update(updates);
+    await recalculateDailyTotal(formattedDate, op.dateKey);
+  } catch (err) {
+    await queuePut(op);
+    throw err;
+  }
+}
+
+async function syncEditSaleOp(op) {
+  const snap = await db.ref("Sales/" + op.saleId).once("value");
+  if (!snap.exists()) { await queueDelete(op.opId); return; }
+
+  const actualServerSale = snap.val();
+  const itemId = actualServerSale.itemId || op.itemId;
+  const actualOldQty = Number(actualServerSale.quantity) || 0;
+  const actualQtyDiff = op.newQty - actualOldQty;
+  const formattedDate = op.formattedDate || actualServerSale.date;
+
+  const updates = {};
+  updates["Sales/" + op.saleId + "/quantity"] = op.newQty;
+  updates["Sales/" + op.saleId + "/amount"] = op.newAmt;
+  updates["Items/" + itemId + "/stock"] = firebase.database.ServerValue.increment(-actualQtyDiff);
+
+  await queueDelete(op.opId);
+  try {
+    await db.ref().update(updates);
+    await recalculateDailyTotal(formattedDate, op.dateKey);
+  } catch (err) {
+    await queuePut(op);
+    throw err;
+  }
 }
 
 async function syncRemitOp(op) {
-  await db.ref("Remittances/" + op.dateKey).set(op.data);
   await queueDelete(op.opId);
+  try {
+    await db.ref("Remittances/" + op.dateKey).set(op.data);
+  } catch (err) {
+    await queuePut(op);
+    throw err;
+  }
 }
 
 async function syncReturnOp(op) {
@@ -349,8 +454,13 @@ async function syncReturnOp(op) {
   updates["Returns/" + op.monthKey + "/" + op.returnId] = op.data;
   updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
 
-  await db.ref().update(updates);
   await queueDelete(op.opId);
+  try {
+    await db.ref().update(updates);
+  } catch (err) {
+    await queuePut(op);
+    throw err;
+  }
 }
 
 async function syncPurchaseOp(op) {
@@ -361,21 +471,13 @@ async function syncPurchaseOp(op) {
   updates["Purchases/" + op.monthKey + "/" + op.purchaseId] = op.data;
   updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(+op.qty);
 
-  await db.ref().update(updates);
   await queueDelete(op.opId);
-}
-async function syncEditSaleOp(op) {
-  const exists = await db.ref("Sales/" + op.saleId).once("value");
-  if (!exists.exists()) { await queueDelete(op.opId); return; }
-
-  const updates = {};
-  updates["Sales/" + op.saleId + "/quantity"] = op.newQty;
-  updates["Sales/" + op.saleId + "/amount"] = op.newAmt;
-  updates["DailySales/" + op.dateKey] = firebase.database.ServerValue.increment(op.amtDiff);
-  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qtyDiff);
-
-  await db.ref().update(updates);
-  await queueDelete(op.opId);
+  try {
+    await db.ref().update(updates);
+  } catch (err) {
+    await queuePut(op);
+    throw err;
+  }
 }
 
 // =========================
@@ -408,7 +510,6 @@ async function ensureAuthLoaded() {
     return authConfig;
   }
 
-  // first-time default
   const defaultUser = "admin";
   const defaultPass = "admin123";
   const defaultHash = await sha256(defaultPass);
@@ -533,7 +634,6 @@ function showSalesSubPage(pageId) {
 // App Startup
 // =========================
 window.addEventListener("load", async () => {
-  // migrate legacy plain password (if any)
   const legacyPlainPass = localStorage.getItem("rememberedPass");
   if (legacyPlainPass) {
     const migratedHash = await sha256(legacyPlainPass);
@@ -558,10 +658,9 @@ window.addEventListener("load", async () => {
   if (filterSaleDate) filterSaleDate.value = today;
 
   initConnectionMonitor();
-  queueInit().catch(() => { /* fallback already handled */ });
+  queueInit().catch(() => {});
 
   ensureAuthLoaded().catch((err) => console.error("Auth error:", err));
 
-  // load inventory (defined in inventory.js)
   if (typeof loadItemsFromFirebase === "function") loadItemsFromFirebase();
 });

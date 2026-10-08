@@ -1,6 +1,6 @@
 // sales.js
 // =========================
-// Billing & Sales Management (with Edit & Delete support)
+// Billing & Sales Management (Zero-Drift Deterministic Sync & Merge)
 // =========================
 
 function updateSalesStockDetails() {
@@ -12,13 +12,14 @@ function updateSalesStockDetails() {
 
 function calculateTotalAmount() {
   const name = document.getElementById("salesItemSelect").value;
-  const qty = parseFloat(document.getElementById("saleQty").value) || 0;
+  const qty = parseInt(document.getElementById("saleQty").value, 10) || 0;
   const it = itemsData[name];
-  if (!it) {
+  if (!it || qty <= 0) {
     document.getElementById("saleTotalAmt").innerText = "₹ 0.00";
     return;
   }
-  document.getElementById("saleTotalAmt").innerText = "₹ " + (qty * (parseFloat(it.mrp) || 0)).toFixed(2);
+  const unitMrp = Number(it.mrp) || 0;
+  document.getElementById("saleTotalAmt").innerText = "₹ " + (qty * unitMrp).toFixed(2);
 }
 
 function getFormattedDate(dateString) {
@@ -28,9 +29,11 @@ function getFormattedDate(dateString) {
 }
 
 async function saveBill(btn) {
+  await queueReady;
+
   const dateRaw = document.getElementById("saleDate").value;
   const formattedDate = getFormattedDate(dateRaw);
-  const name = document.getElementById("salesItemSelect").value;
+  const name = (document.getElementById("salesItemSelect").value || "").trim();
   const item = itemsData[name];
 
   if (!formattedDate) { alert("Date തിരഞ്ഞെടുക്കുക!"); return; }
@@ -40,41 +43,125 @@ async function saveBill(btn) {
   if (!qtyNum || qtyNum <= 0) { alert("ശരിയായ എണ്ണം നൽകുക!"); return; }
   if (qtyNum > item.stock) { alert("സ്റ്റോക്ക് ലഭ്യമല്ല!"); return; }
 
-  const totalAmt = qtyNum * parseFloat(item.mrp);
+  const unitMrp = Number(item.mrp) || 0;
+  const addedAmt = Number((qtyNum * unitMrp).toFixed(2));
+  const dateKey = formattedDate.replaceAll("/", "-");
 
   flashButton(btn, { state: "success", text: "✔ ബിൽ സേവ് ചെയ്തു!" });
   document.getElementById("saleQty").value = "";
   document.getElementById("saleTotalAmt").innerText = "₹ 0.00";
 
-  const saleId = db.ref("Sales").push().key;
-  const dateKey = formattedDate.replaceAll("/", "-");
+  // 1. Check if same item + same date is already in offline pending queue
+  const summary = await getPendingSummary();
+  const pendingAdds = summary.pendingSalesByDate[formattedDate] || [];
+  const existingPendingAdd = pendingAdds.find(op => (op.itemName || "").trim() === name);
 
+  if (existingPendingAdd) {
+    existingPendingAdd.qty += qtyNum;
+    existingPendingAdd.amount = Number((existingPendingAdd.amount + addedAmt).toFixed(2));
+    existingPendingAdd.saleData.quantity = existingPendingAdd.qty;
+    existingPendingAdd.saleData.amount = existingPendingAdd.amount;
+    await queuePut(existingPendingAdd);
+
+    showToast(`മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${existingPendingAdd.qty})`, "success", 2500);
+    syncPendingOps();
+    return;
+  }
+
+  // 2. If online, check if same item + same date already exists on Server
+  if (isConnected) {
+    try {
+      const snap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
+      let matchedServerSale = null;
+      let matchedServerSaleId = null;
+
+      snap.forEach(child => {
+        const s = child.val();
+        const sId = (s && s.id) || child.key;
+        if (s && !summary.pendingDeleteSaleIds.has(sId) && (s.itemName || "").trim() === name) {
+          if (!matchedServerSale) {
+            matchedServerSale = s;
+            matchedServerSaleId = sId;
+          }
+        }
+      });
+
+      if (matchedServerSale && matchedServerSaleId) {
+        const existingEditOp = await queueGet("editSale:" + matchedServerSaleId);
+        const baseOldQty = existingEditOp ? existingEditOp.oldQty : (Number(matchedServerSale.quantity) || 0);
+        const baseOldAmt = existingEditOp ? existingEditOp.oldAmt : (Number(matchedServerSale.amount) || 0);
+
+        const currentQty = existingEditOp ? existingEditOp.newQty : baseOldQty;
+        const currentAmt = existingEditOp ? existingEditOp.newAmt : baseOldAmt;
+
+        const newQty = currentQty + qtyNum;
+        const newAmt = Number((currentAmt + addedAmt).toFixed(2));
+
+        await queuePut({
+          opId: "editSale:" + matchedServerSaleId,
+          type: "editSale",
+          saleId: matchedServerSaleId,
+          dateKey,
+          formattedDate,
+          itemId: item.id,
+          itemName: name,
+          oldQty: baseOldQty,
+          newQty,
+          qtyDiff: newQty - baseOldQty,
+          oldAmt: baseOldAmt,
+          newAmt,
+          amtDiff: Number((newAmt - baseOldAmt).toFixed(2))
+        });
+
+        showToast(`മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${newQty})`, "success", 2500);
+        syncPendingOps();
+        return;
+      }
+    } catch (e) {
+      console.warn("Could not check existing sales:", e);
+    }
+  }
+
+  // 3. Otherwise create a new sale entry
+  const saleId = db.ref("Sales").push().key;
   const saleData = {
-    id: saleId, date: formattedDate, itemName: name,
-    quantity: qtyNum, amount: Number(totalAmt.toFixed(2))
+    id: saleId,
+    itemId: item.id,
+    date: formattedDate,
+    itemName: name,
+    quantity: qtyNum,
+    amount: addedAmt
   };
 
   await queuePut({
-    opId: "sale:" + saleId, type: "sale", saleId, dateKey,
-    itemId: item.id, itemName: name, qty: qtyNum,
-    amount: Number(totalAmt.toFixed(2)), saleData
+    opId: "sale:" + saleId,
+    type: "sale",
+    saleId,
+    dateKey,
+    formattedDate,
+    itemId: item.id,
+    itemName: name,
+    qty: qtyNum,
+    amount: addedAmt,
+    saleData
   });
 
-  item.stock = Math.max(0, item.stock - qtyNum);
-  updateSalesStockDetails();
   syncPendingOps();
 }
 
 async function loadSalesList() {
   const formattedDate = getFormattedDate(document.getElementById("filterSaleDate").value);
   const tbody = document.getElementById("salesListBody");
-  if (!formattedDate) { tbody.innerHTML = "<tr><td colspan='4'>Date തിരഞ്ഞെടുക്കുക</td></tr>"; return; }
+  if (!formattedDate) {
+    tbody.innerHTML = "<tr><td colspan='4'>Date തിരഞ്ഞെടുക്കുക</td></tr>";
+    return;
+  }
 
+  await queueReady;
   const summary = await getPendingSummary();
   const pendingAdds = summary.pendingSalesByDate[formattedDate] || [];
   const deletedIds = summary.pendingDeleteSaleIds;
 
-  // Map any pending edits so UI shows updated quantity/amount immediately
   const pendingEditsMap = {};
   for (const op of summary.ops) {
     if (op.type === "editSale") {
@@ -84,11 +171,13 @@ async function loadSalesList() {
 
   db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value", snap => {
     tbody.innerHTML = "";
+
     for (const op of pendingAdds) {
       const s = op.saleData;
       tbody.innerHTML += `<tr style="background:#FFFDE7;">
         <td style="text-align:left;">${s.itemName} <span class="badge-pending">PENDING</span></td>
-        <td>${s.quantity}</td><td>₹ ${Number(s.amount).toFixed(2)}</td>
+        <td>${s.quantity}</td>
+        <td>₹ ${Number(s.amount).toFixed(2)}</td>
         <td>
           <button class="edit-btn" onclick='editSale(${js(s.id)}, ${js(s.itemName)}, ${s.quantity}, ${s.amount}, ${js(s.date)})'>Edit</button>
           <button class="delete-btn" onclick='cancelPendingSale(${js(op.opId)})'>Cancel</button>
@@ -96,12 +185,18 @@ async function loadSalesList() {
       </tr>`;
     }
 
-    let anyServer = false;
+    const serverSales = [];
     snap.forEach(child => {
       const sale = child.val();
-      if (!sale || deletedIds.has(sale.id)) return;
-      anyServer = true;
+      if (!sale) return;
+      sale.id = sale.id || child.key;
+      if (deletedIds.has(sale.id)) return;
+      serverSales.push(sale);
+    });
 
+    serverSales.sort((a, b) => (a.itemName || "").localeCompare(b.itemName || ""));
+
+    for (const sale of serverSales) {
       let q = Number(sale.quantity) || 0;
       let a = Number(sale.amount) || 0;
       let badge = "";
@@ -121,21 +216,25 @@ async function loadSalesList() {
           <button class="delete-btn" onclick='deleteSale(${js(sale.id)}, ${js(sale.itemName)}, ${q}, ${a}, ${js(sale.date)})'>Delete</button>
         </td>
       </tr>`;
-    });
-    if (!anyServer && pendingAdds.length === 0) {
+    }
+
+    if (serverSales.length === 0 && pendingAdds.length === 0) {
       tbody.innerHTML = "<tr><td colspan='4'>ബില്ലുകൾ ലഭ്യമല്ല</td></tr>";
     }
   });
 }
 
-async function editSale(saleId, itemName, oldQty, oldAmt, saleDateStr) {
-  const item = itemsData[itemName];
+async function editSale(saleId, itemName, currentShownQty, currentShownAmt, saleDateStr) {
+  await queueReady;
+
+  const cleanName = (itemName || "").trim();
+  const item = itemsData[cleanName];
   if (!item) { alert("ഈ ഐറ്റം സ്റ്റോക്ക് ലിസ്റ്റിൽ കണ്ടെത്താനായില്ല!"); return; }
 
-  const maxAllowedQty = item.stock + oldQty;
+  const maxAllowedQty = item.stock + currentShownQty;
   const newQtyStr = prompt(
-    `'${itemName}'\nനിലവിലെ ബില്ലിലെ എണ്ണം: ${oldQty}\nപുതിയ ശരിയായ എണ്ണം (Qty) നൽകുക (പരമാവധി ലഭ്യമായത്: ${maxAllowedQty}):`,
-    oldQty
+    `'${cleanName}'\nനിലവിലെ ബില്ലിലെ എണ്ണം: ${currentShownQty}\nപുതിയ ശരിയായ എണ്ണം (Qty) നൽകുക (പരമാവധി ലഭ്യമായത്: ${maxAllowedQty}):`,
+    currentShownQty
   );
   if (newQtyStr === null) return;
 
@@ -144,19 +243,16 @@ async function editSale(saleId, itemName, oldQty, oldAmt, saleDateStr) {
     alert("ശരിയായ എണ്ണം നൽകുക! (മുഴുവനായി ഒഴിവാക്കാനാണെങ്കിൽ Delete ബട്ടൺ ഉപയോഗിക്കുക)");
     return;
   }
-  if (newQty === oldQty) return;
+  if (newQty === currentShownQty) return;
   if (newQty > maxAllowedQty) {
     alert(`അത്രയും സ്റ്റോക്ക് ലഭ്യമല്ല! പരമാവധി ${maxAllowedQty} എണ്ണം വരെ നൽകാം.`);
     return;
   }
 
-  const unitPrice = parseFloat(item.mrp) || (oldQty > 0 ? (oldAmt / oldQty) : 0);
+  const unitPrice = (currentShownQty > 0 ? (currentShownAmt / currentShownQty) : 0) || Number(item.mrp) || 0;
   const newAmt = Number((newQty * unitPrice).toFixed(2));
-  const qtyDiff = newQty - oldQty; // positive if increased, negative if reduced
-  const amtDiff = Number((newAmt - oldAmt).toFixed(2));
   const dateKey = saleDateStr.replaceAll("/", "-");
 
-  // If this sale is still sitting in offline queue (not yet synced), update it directly
   const pendingAddOp = await queueGet("sale:" + saleId);
   if (pendingAddOp) {
     pendingAddOp.qty = newQty;
@@ -165,18 +261,18 @@ async function editSale(saleId, itemName, oldQty, oldAmt, saleDateStr) {
     pendingAddOp.saleData.amount = newAmt;
     await queuePut(pendingAddOp);
   } else {
-    // If another edit was already queued for this saleId, merge with original values
     const existingEditOp = await queueGet("editSale:" + saleId);
-    const baseOldQty = existingEditOp ? existingEditOp.oldQty : oldQty;
-    const baseOldAmt = existingEditOp ? existingEditOp.oldAmt : oldAmt;
+    const baseOldQty = existingEditOp ? existingEditOp.oldQty : currentShownQty;
+    const baseOldAmt = existingEditOp ? existingEditOp.oldAmt : currentShownAmt;
 
     await queuePut({
       opId: "editSale:" + saleId,
       type: "editSale",
       saleId,
       dateKey,
+      formattedDate: saleDateStr,
       itemId: item.id,
-      itemName,
+      itemName: cleanName,
       oldQty: baseOldQty,
       newQty,
       qtyDiff: newQty - baseOldQty,
@@ -186,48 +282,51 @@ async function editSale(saleId, itemName, oldQty, oldAmt, saleDateStr) {
     });
   }
 
-  item.stock = Math.max(0, item.stock - qtyDiff);
-  updateSalesStockDetails();
   showToast("ബിൽ വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു!", "success");
   loadSalesList();
   syncPendingOps();
 }
 
 async function cancelPendingSale(opId) {
+  await queueReady;
   const op = await queueGet(opId);
   if (!op || op.type !== "sale") return;
-  if (itemsData[op.itemName]) itemsData[op.itemName].stock += op.qty;
   await queueDelete(opId);
   showToast("Sale cancelled", "success");
-  updateSalesStockDetails();
   loadSalesList();
 }
 
-async function deleteSale(saleId, itemName, qty, amt, saleDateStr) {
+async function deleteSale(saleId, itemName, currentShownQty, currentShownAmt, saleDateStr) {
+  await queueReady;
   if (!confirm("ഈ ബിൽ ഡിലീറ്റ് ചെയ്യണോ?")) return;
   const pendingAddOp = await queueGet("sale:" + saleId);
   if (pendingAddOp) { await cancelPendingSale("sale:" + saleId); return; }
 
-  // Remove any pending edit for this sale before deleting
+  const cleanName = (itemName || "").trim();
+  const item = itemsData[cleanName];
+  if (!item) return;
+
   const existingEditOp = await queueGet("editSale:" + saleId);
   if (existingEditOp) {
     await queueDelete("editSale:" + saleId);
   }
 
-  const item = itemsData[itemName];
-  if (!item) return;
-
-  const origQty = existingEditOp ? existingEditOp.oldQty : (parseInt(qty, 10) || 0);
-  const origAmt = existingEditOp ? existingEditOp.oldAmt : (Number(amt) || 0);
+  const serverRevertQty = existingEditOp ? existingEditOp.oldQty : (parseInt(currentShownQty, 10) || 0);
+  const serverRevertAmt = existingEditOp ? existingEditOp.oldAmt : (Number(currentShownAmt) || 0);
 
   const dateKey = saleDateStr.replaceAll("/", "-");
   await queuePut({
-    opId: "delSale:" + saleId, type: "deleteSale", saleId, dateKey,
-    itemId: item.id, itemName, qty: origQty, amount: origAmt
+    opId: "delSale:" + saleId,
+    type: "deleteSale",
+    saleId,
+    dateKey,
+    formattedDate: saleDateStr,
+    itemId: item.id,
+    itemName: cleanName,
+    qty: serverRevertQty,
+    amount: serverRevertAmt
   });
 
-  item.stock += parseInt(qty, 10) || 0;
-  updateSalesStockDetails();
   showToast("ബിൽ ഡിലീറ്റ് ചെയ്തു", "success");
   loadSalesList();
   syncPendingOps();
