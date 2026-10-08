@@ -9,7 +9,7 @@ const BULK_DATA = [
   ["3 in 1 Sandal Soap Famili Pack (₹174)", 174.00, 31], ["3 in 1 Sandal Soap Famili Pack (₹195)", 195.00, 0],
   ["Agasthya Hair Oil - അഗസ്‌ത്യ ഹെയർ ഓയിൽ - 100", 150.00, 11], ["Ajwain Seed - അയമോദകം - 80 g", 50.00, 4],
   ["Aloe Vera Gel - കറ്റാർ വാഴ ജൽ - 200 g", 200.00, 32], ["Amla Kanthari - നെല്ലിക്ക കാന്താരി - 500 ml", 140.00, 5],
-  ["Asafoetida - കായം", 70.00, 4], ["Ashwagandha Powder - അശ്വഗന്ധ പൗഡർ - 50 g", 100.00, 19],
+  ["Asafoetida", 70.00, 4], ["Ashwagandha Powder - അശ്വഗന്ധ പൗഡർ - 50 g", 100.00, 19],
   ["Ashwagandha Tea - അശ്വഗന്ധ റ്റീ - 250 g", 190.00, 0], ["Arrowroot Powder - കൂവപ്പൊടി - 150 g", 250.00, 15],
   ["Basket", 175.00, 0], ["Bamboo Rice - മുളയരി - 500 g", 250.00, 1],
   ["Bhringraj Powder - കയ്യുന്നിപൊടി - 100 g", 50.00, 5], ["Big Honey - വൻതേൻ - 200 g (₹120)", 120.00, 0],
