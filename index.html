@@ -233,6 +233,28 @@
   </div>
   <!-- Print Preview & Print Area -->
   <div id="printArea"></div>
+  <!-- Remittance Edit Modal -->
+  <div id="remitModal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 style="margin-top:0; color:#1976D2;">Edit Remittance</h3>
+      <p id="remitModalDate" style="font-size:14px; color:#555; margin-bottom:15px;"></p>
+      
+      <div style="margin-bottom:15px; text-align:left;">
+        <label style="font-weight:bold; font-size:14px;">Amount:</label>
+        <input type="number" id="remitModalAmt" class="flex-item" style="width:100%; margin-top:5px; box-sizing:border-box;" placeholder="Enter amount">
+      </div>
+      
+      <div style="margin-bottom:20px; text-align:left;">
+        <label style="font-weight:bold; font-size:14px;">Remarks:</label>
+        <input type="text" id="remitModalRemarks" class="flex-item" style="width:100%; margin-top:5px; box-sizing:border-box;" placeholder="Enter remarks (optional)">
+      </div>
+      
+      <div style="display:flex; gap:10px;">
+        <button onclick="closeRemitModal()" style="flex:1; padding:10px; border:none; border-radius:4px; background:#e0e0e0; color:#333; font-weight:bold; cursor:pointer;">CANCEL</button>
+        <button onclick="submitRemitModal()" style="flex:1; padding:10px; border:none; border-radius:4px; background:#1976D2; color:white; font-weight:bold; cursor:pointer;">SAVE</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modular JavaScript Files -->
   <script src="data.js"></script>

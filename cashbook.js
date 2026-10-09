@@ -108,17 +108,33 @@ async function calculateAbstractBalance(month, year, income, remit) {
   }
 }
 
-async function editRemittance(dateKey, oldAmt, oldRemarks) {
-  const amtStr = prompt(`Enter remitted amount (${dateKey}):`, oldAmt > 0 ? oldAmt : "");
-  if (amtStr === null) return;
+let currentRemitDateKey = "";
 
-  const remarks = prompt("Remarks:", oldRemarks || "");
-  if (remarks === null) return;
+function editRemittance(dateKey, oldAmt, oldRemarks) {
+  currentRemitDateKey = dateKey;
+  
+  document.getElementById("remitModalDate").innerText = "Date: " + dateKey;
+  document.getElementById("remitModalAmt").value = oldAmt > 0 ? oldAmt : "";
+  document.getElementById("remitModalRemarks").value = oldRemarks || "";
+  
+  document.getElementById("remitModal").style.display = "flex";
+  
+  setTimeout(() => document.getElementById("remitModalAmt").focus(), 100);
+}
 
+function closeRemitModal() {
+  document.getElementById("remitModal").style.display = "none";
+}
+
+async function submitRemitModal() {
+  const amtStr = document.getElementById("remitModalAmt").value;
+  const remarks = document.getElementById("remitModalRemarks").value;
+  
   const data = { amount: _num(amtStr), remarks: remarks || "" };
 
-  await queuePut({ opId: "remit:" + dateKey, type: "remit", dateKey, data });
+  await queuePut({ opId: "remit:" + currentRemitDateKey, type: "remit", dateKey: currentRemitDateKey, data });
 
+  closeRemitModal();
   showToast("Remittance saved (sync pending if offline)", "success", 2200);
   loadAdminData();
   syncPendingOps();
