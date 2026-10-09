@@ -15,10 +15,10 @@ function setPrintMode(mode) {
     document.head.appendChild(_pdfStyleEl);
   }
 
+  // max-width ഇവിടെ നിന്ന് മാറ്റി അതത് മോഡുകളിൽ (cashbook/monthly) നൽകിയിരിക്കുന്നു
   const commonPreviewCss = `
     #printArea {
       background: #fff;
-      max-width: 1150px;
       margin: 15px auto;
       padding: 15px;
       border-radius: 8px;
@@ -62,7 +62,7 @@ function setPrintMode(mode) {
         margin: 0;
         padding: 0;
         box-shadow: none;
-        max-width: 100%;
+        max-width: 100% !important;
         overflow: visible;
       }
       .no-print { display: none !important; }
@@ -73,20 +73,21 @@ function setPrintMode(mode) {
     _pdfStyleEl.textContent =
       commonPreviewCss +
       `
-      .print-title { font-size: 16px; margin: 0 0 6px; text-align: center; color:#000; }
-      .print-meta { display:flex; justify-content:space-between; margin: 4px 0 8px; font-size: 12px; font-weight: 700; }
-      .print-table { font-size: 11px; }
-      .print-table th, .print-table td { padding: 4px; }
+      #printArea { max-width: 800px; } /* A4 Portrait വീതി */
+      .print-title { font-size: 18px; margin: 0 0 8px; text-align: center; color:#000; }
+      .print-meta { display:flex; justify-content:space-between; margin: 4px 0 12px; font-size: 13px; font-weight: 700; }
+      .print-table { font-size: 13px; }
+      .print-table th, .print-table td { padding: 6px; }
       .print-table th { background:#eee !important; -webkit-print-color-adjust: exact; color:#000; }
 
       @media print {
         @page { size: A4 portrait; margin: 0mm; }
         #printArea { padding: 0; }
-        .print-wrap { padding: 4mm; box-sizing: border-box; }
-        .print-title { font-size: 15px; }
-        .print-meta { font-size: 11px; }
-        .print-table { font-size: 10px; }
-        .print-table th, .print-table td { padding: 3px 4px; }
+        .print-wrap { padding: 10mm; box-sizing: border-box; }
+        .print-title { font-size: 16px; }
+        .print-meta { font-size: 12px; }
+        .print-table { font-size: 12px; }
+        .print-table th, .print-table td { padding: 5px; }
         tr { page-break-inside: avoid; }
       }
     `;
@@ -94,6 +95,7 @@ function setPrintMode(mode) {
     _pdfStyleEl.textContent =
       commonPreviewCss +
       `
+      #printArea { max-width: 1150px; } /* A4 Landscape വീതി */
       .print-title { font-size: 15px; margin: 0 0 4px; text-align: center; color:#000; }
       .print-sub { font-size: 11px; margin: 0 0 8px; text-align: center; color:#000; }
       .print-table { font-size: 9px; table-layout: auto; }
@@ -212,7 +214,11 @@ function printAdminPdf() {
       <table class="print-table">
         <thead>
           <tr>
-            <th>Date</th><th>Income</th><th>Remitted</th><th>Remarks</th>
+            <!-- കോളങ്ങളുടെ വീതി ഇവിടെ ക്രമീകരിച്ചിരിക്കുന്നു -->
+            <th style="width: 15%;">Date</th>
+            <th style="width: 15%;">Income</th>
+            <th style="width: 15%;">Remitted</th>
+            <th style="width: 55%;">Remarks</th>
           </tr>
         </thead>
         <tbody>
