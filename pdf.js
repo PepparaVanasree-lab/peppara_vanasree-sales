@@ -420,7 +420,10 @@ async function printWebPdf() {
       const clBfRet = cl + retQ;
       const tot = clBfRet + iTotQ;
       const openingStock = Math.max(0, tot - purQ);
-
+// ആ മാസം സ്റ്റോക്കും വിൽപ്പനയും ഇല്ലാത്ത ഉൽപ്പന്നങ്ങളെ PDF-ൽ നിന്നും ഒഴിവാക്കാൻ
+      if (openingStock === 0 && purQ === 0 && iTotQ === 0 && retQ === 0 && cl === 0) {
+        return; 
+      }
       html += `
         <tr>
           <td>${sl++}</td>
