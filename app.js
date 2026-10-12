@@ -111,7 +111,11 @@ const QUEUE_STORE = "ops";
 const QUEUE_LS_KEY = "vanasree_pending_ops_v1";
 
 function safeJsonParse(s, fallback) {
-  try { return JSON.parse(s); } catch { return fallback; }
+  try {
+    return JSON.parse(s);
+  } catch {
+    return fallback;
+  }
 }
 
 function openQueueDb() {
@@ -165,6 +169,7 @@ async function queuePut(op) {
     tx.onerror = () => reject(tx.error);
     tx.objectStore(QUEUE_STORE).put(op);
   });
+
   await refreshPendingCount();
 }
 
@@ -212,6 +217,7 @@ async function queueDelete(opId) {
     tx.onerror = () => reject(tx.error);
     tx.objectStore(QUEUE_STORE).delete(opId);
   });
+
   await refreshPendingCount();
 }
 
@@ -230,14 +236,22 @@ async function refreshPendingCount() {
   pendingCount = await queueCount();
   updateNetBadge();
 
+  // Recompute live stock from baseStock + remaining pending queue
   if (itemsData && Object.keys(itemsData).length > 0) {
     try {
       const summary = await getPendingSummary();
+
       for (const name in itemsData) {
         const it = itemsData[name];
         const delta = summary.stockDeltaByItemId[it.id] || 0;
         it.stock = Math.max(0, (it.baseStock || 0) + delta);
       }
+
+      // IMPORTANT: keep dropdown in sync with live stock (hide 0-stock items etc.)
+      if (typeof renderSalesDropdown === "function") {
+        renderSalesDropdown();
+      }
+
       if (typeof updateSalesStockDetails === "function") {
         updateSalesStockDetails();
       }
@@ -267,28 +281,30 @@ async function getPendingSummary() {
       }
 
       pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amount || 0);
-
     } else if (op.type === "deleteSale") {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
       pendingDeleteSaleIds.add(op.saleId);
       pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) - (op.amount || 0);
-
     } else if (op.type === "editSale") {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qtyDiff || 0);
       pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amtDiff || 0);
-
     } else if (op.type === "return") {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
-
     } else if (op.type === "purchase") {
       stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
-
     } else if (op.type === "remit") {
       pendingRemitByDateKey[op.dateKey] = op.data;
     }
   }
 
-  return { ops, stockDeltaByItemId, pendingSalesByDate, pendingDeleteSaleIds, pendingIncomeByDateKey, pendingRemitByDateKey };
+  return {
+    ops,
+    stockDeltaByItemId,
+    pendingSalesByDate,
+    pendingDeleteSaleIds,
+    pendingIncomeByDateKey,
+    pendingRemitByDateKey
+  };
 }
 
 // =========================
@@ -325,8 +341,10 @@ async function syncPendingOps() {
   }
 }
 
+// Helper: Recalculate exact DailySales total for a date so Cashbook is never wrong
 async function recalculateDailyTotal(formattedDate, dateKey) {
   if (!formattedDate || !dateKey) return;
+
   const snap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
   let sum = 0;
   snap.forEach((c) => {
@@ -338,16 +356,22 @@ async function recalculateDailyTotal(formattedDate, dateKey) {
 
 async function syncSaleOp(op) {
   const exists = await db.ref("Sales/" + op.saleId).once("value");
-  if (exists.exists()) { await queueDelete(op.opId); return; }
+  if (exists.exists()) {
+    await queueDelete(op.opId);
+    return;
+  }
 
   const formattedDate = op.formattedDate || (op.saleData && op.saleData.date);
 
+  // Find same-date same-item sale on server (merge target)
   const daySnap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
   let existingServerSale = null;
   let existingServerSaleId = null;
+
   daySnap.forEach((c) => {
     const s = c.val();
-    const sId = (s && s.id) || c.key;
+    const sId = (s && s.id) || c.key; // child.key fallback (important for legacy rows)
+
     if (s && sId !== op.saleId && (s.itemName || "").trim() === (op.itemName || "").trim()) {
       if (!existingServerSale) {
         existingServerSale = s;
@@ -376,8 +400,11 @@ async function syncSaleOp(op) {
   } else {
     updates["Sales/" + op.saleId] = op.saleData;
   }
+
   updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
 
+  // Atomic sync fix:
+  // Delete from queue BEFORE Firebase listener fires; rollback on failure.
   await queueDelete(op.opId);
   try {
     await db.ref().update(updates);
@@ -390,7 +417,10 @@ async function syncSaleOp(op) {
 
 async function syncDeleteSaleOp(op) {
   const snap = await db.ref("Sales/" + op.saleId).once("value");
-  if (!snap.exists()) { await queueDelete(op.opId); return; }
+  if (!snap.exists()) {
+    await queueDelete(op.opId);
+    return;
+  }
 
   const actualServerSale = snap.val();
   const itemId = actualServerSale.itemId || op.itemId;
@@ -413,7 +443,10 @@ async function syncDeleteSaleOp(op) {
 
 async function syncEditSaleOp(op) {
   const snap = await db.ref("Sales/" + op.saleId).once("value");
-  if (!snap.exists()) { await queueDelete(op.opId); return; }
+  if (!snap.exists()) {
+    await queueDelete(op.opId);
+    return;
+  }
 
   const actualServerSale = snap.val();
   const itemId = actualServerSale.itemId || op.itemId;
@@ -448,7 +481,10 @@ async function syncRemitOp(op) {
 
 async function syncReturnOp(op) {
   const exists = await db.ref("Returns/" + op.monthKey + "/" + op.returnId).once("value");
-  if (exists.exists()) { await queueDelete(op.opId); return; }
+  if (exists.exists()) {
+    await queueDelete(op.opId);
+    return;
+  }
 
   const updates = {};
   updates["Returns/" + op.monthKey + "/" + op.returnId] = op.data;
@@ -465,7 +501,10 @@ async function syncReturnOp(op) {
 
 async function syncPurchaseOp(op) {
   const exists = await db.ref("Purchases/" + op.monthKey + "/" + op.purchaseId).once("value");
-  if (exists.exists()) { await queueDelete(op.opId); return; }
+  if (exists.exists()) {
+    await queueDelete(op.opId);
+    return;
+  }
 
   const updates = {};
   updates["Purchases/" + op.monthKey + "/" + op.purchaseId] = op.data;
@@ -527,15 +566,24 @@ async function changePasswordPrompt() {
     if (oldPass === null) return;
 
     const oldHash = await sha256(oldPass);
-    if (oldHash !== cfg.passwordHash) { showToast("Old password is wrong!", "error"); return; }
+    if (oldHash !== cfg.passwordHash) {
+      showToast("Old password is wrong!", "error");
+      return;
+    }
 
     const newPass1 = prompt("Enter NEW password (min 4 chars):");
     if (newPass1 === null) return;
-    if (newPass1.trim().length < 4) { showToast("Password too short!", "error"); return; }
+    if (newPass1.trim().length < 4) {
+      showToast("Password too short!", "error");
+      return;
+    }
 
     const newPass2 = prompt("Confirm NEW password:");
     if (newPass2 === null) return;
-    if (newPass1 !== newPass2) { showToast("Password not matching!", "error"); return; }
+    if (newPass1 !== newPass2) {
+      showToast("Password not matching!", "error");
+      return;
+    }
 
     const newHash = await sha256(newPass1);
     await db.ref(AUTH_PATH + "/passwordHash").set(newHash);
@@ -564,9 +612,7 @@ async function handleLogin() {
 
     const cfg = await ensureAuthLoaded();
     const enteredHash =
-      (p === MASKED_PASS && passEl.dataset.savedHash)
-        ? passEl.dataset.savedHash
-        : await sha256(p);
+      p === MASKED_PASS && passEl.dataset.savedHash ? passEl.dataset.savedHash : await sha256(p);
 
     if (u === cfg.username && enteredHash === cfg.passwordHash) {
       localStorage.removeItem("rememberedPass");
@@ -634,6 +680,7 @@ function showSalesSubPage(pageId) {
 // App Startup
 // =========================
 window.addEventListener("load", async () => {
+  // migrate legacy rememberedPass (plain text) -> rememberedHash
   const legacyPlainPass = localStorage.getItem("rememberedPass");
   if (legacyPlainPass) {
     const migratedHash = await sha256(legacyPlainPass);

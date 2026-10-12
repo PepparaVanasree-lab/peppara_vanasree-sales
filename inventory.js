@@ -3,6 +3,38 @@
 // Inventory, Purchase, Return & Bulk Import
 // =========================
 
+// =========================
+// Sales Dropdown (hide 0-stock, keep previous selection visible)
+// =========================
+function renderSalesDropdown(preferredSelection = null) {
+  const sel = document.getElementById("salesItemSelect");
+  if (!sel) return;
+
+  const prevSelected = preferredSelection ?? sel.value;
+
+  sel.innerHTML = "";
+
+  const names = Object.keys(itemsData || {}).sort((a, b) => a.localeCompare(b));
+  for (const name of names) {
+    const it = itemsData[name];
+    if (!it) continue;
+
+    // Hide out-of-stock items, but keep previously selected item visible
+    if ((Number(it.stock) || 0) <= 0 && name !== prevSelected) continue;
+
+    sel.add(new Option(it.itemName, it.itemName));
+  }
+
+  // restore selection if still present
+  if (prevSelected && Array.from(sel.options).some((o) => o.value === prevSelected)) {
+    sel.value = prevSelected;
+  } else if (sel.options.length > 0) {
+    sel.selectedIndex = 0;
+  }
+
+  if (typeof updateSalesStockDetails === "function") updateSalesStockDetails();
+}
+
 let currentStockModalMode = "purchase"; // "purchase" | "return"
 let itemsListener = null;
 
@@ -19,7 +51,7 @@ const toMoney = (v) => {
   return n;
 };
 const escHtml = (s) =>
-  String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
+  String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
 // =========================
 // Inventory Search Filter
@@ -40,6 +72,7 @@ function filterItems() {
 // Load Items + Render Inventory
 // =========================
 function loadItemsFromFirebase() {
+  // Detach previous listener (avoid duplicates)
   if (itemsListener) db.ref("Items").off("value", itemsListener);
 
   itemsListener = async (snapshot) => {
@@ -47,22 +80,24 @@ function loadItemsFromFirebase() {
     const invBody = document.getElementById("inventoryListBody");
     const importBtn = document.getElementById("importBtn");
 
-    const prevSelected = addSalesSelect.value;
+    const prevSelected = addSalesSelect ? addSalesSelect.value : null;
 
-    addSalesSelect.innerHTML = "";
+    if (addSalesSelect) addSalesSelect.innerHTML = "";
     invBody.innerHTML = "";
     itemsData = {};
 
+    // Build itemsData map (unique by trimmed name)
     snapshot.forEach((child) => {
       const item = child.val();
       if (!item || !item.itemName) return;
 
-      item.id = item.id || child.key;
+      item.id = item.id || child.key; // Guarantee id exists
 
       const cleanName = normalizeName(item.itemName);
       const stockNum = toInt(item.stock);
       const mrpNum = toMoney(item.mrp);
 
+      // Detect duplicates (same name, different IDs)
       if (itemsData[cleanName] && itemsData[cleanName].id !== item.id) {
         console.warn("Duplicate itemName in DB:", cleanName, itemsData[cleanName].id, item.id);
       }
@@ -75,6 +110,7 @@ function loadItemsFromFirebase() {
       itemsData[cleanName] = item;
     });
 
+    // Apply pending-queue stock delta (offline ops)
     await queueReady;
     const summary = await getPendingSummary();
     for (const name in itemsData) {
@@ -83,8 +119,9 @@ function loadItemsFromFirebase() {
       it.stock = Math.max(0, (it.baseStock || 0) + delta);
     }
 
-    const bulk = (typeof BULK_DATA !== "undefined" && Array.isArray(BULK_DATA)) ? BULK_DATA : [];
-    const total = (typeof TOTAL_IMPORT_ITEMS !== "undefined") ? TOTAL_IMPORT_ITEMS : bulk.length;
+    // Import button logic based on missing BULK items
+    const bulk = typeof BULK_DATA !== "undefined" && Array.isArray(BULK_DATA) ? BULK_DATA : [];
+    const total = typeof TOTAL_IMPORT_ITEMS !== "undefined" ? TOTAL_IMPORT_ITEMS : bulk.length;
     const existing = new Set(Object.keys(itemsData).map(normalizeName));
     const missingCount = bulk.filter((x) => !existing.has(normalizeName(x[0]))).length;
 
@@ -99,13 +136,12 @@ function loadItemsFromFirebase() {
           : `⚡ IMPORT REMAINING ITEMS (${missingCount} left)`;
     }
 
+    // Render inventory table from unique sorted names
     const names = Object.keys(itemsData).sort((a, b) => a.localeCompare(b));
 
     let rowsHtml = "";
     for (const name of names) {
       const it = itemsData[name];
-
-      addSalesSelect.add(new Option(it.itemName, it.itemName));
 
       rowsHtml += `<tr>
         <td style="text-align:left;">${escHtml(it.itemName)}</td>
@@ -120,9 +156,8 @@ function loadItemsFromFirebase() {
 
     invBody.innerHTML = rowsHtml;
 
-    if (prevSelected && itemsData[prevSelected]) addSalesSelect.value = prevSelected;
-
-    updateSalesStockDetails();
+    // Build sales dropdown: hide 0-stock items, keep previous selection visible
+    renderSalesDropdown(prevSelected);
   };
 
   db.ref("Items").on("value", itemsListener);
@@ -142,6 +177,7 @@ async function bulkImportItems() {
   const originalText = importBtn.innerText;
   importBtn.disabled = true;
 
+  // Pause listener during import (prevents re-render lag)
   if (itemsListener) db.ref("Items").off("value", itemsListener);
 
   try {
@@ -150,6 +186,7 @@ async function bulkImportItems() {
       return;
     }
 
+    // Read existing names from DB (resume-safe)
     const snap = await db.ref("Items").once("value");
     const existingNames = new Set();
     snap.forEach((c) => {
@@ -184,23 +221,25 @@ async function bulkImportItems() {
 
       done++;
 
+      // Update UI progress every 5 items
       if (done % 5 === 0 || done === toImport.length) {
         importBtn.innerText = `⏳ Importing... ${done} / ${toImport.length}`;
       }
 
+      // Yield occasionally to keep UI responsive
       if (done % 10 === 0) await new Promise((r) => setTimeout(r, 0));
     }
 
     showToast(`വിജയകരം! ${done} ഐറ്റങ്ങളും സ്റ്റോക്കിൽ ആഡ് ചെയ്തു.`, "success", 3000);
     importBtn.style.display = "none";
-
   } catch (e) {
     console.error("Import error:", e);
     showToast("Import failed: " + (e.message || e), "error", 5000);
-
   } finally {
     importBtn.disabled = false;
     importBtn.innerText = originalText;
+
+    // Re-attach listener
     loadItemsFromFirebase();
   }
 }
@@ -213,11 +252,18 @@ function addNewInvItem() {
   const stock = toInt(document.getElementById("invNewStock").value);
   const mrp = toMoney(document.getElementById("invNewMrp").value);
 
-  if (!name || !mrp) { alert("ഐറ്റത്തിന്റെ പേരും വിലയും നിർബന്ധമാണ്!"); return; }
-  if (itemsData[name]) { alert("ഈ ഐറ്റം നിലവിലുണ്ട്!"); return; }
+  if (!name || !mrp) {
+    alert("ഐറ്റത്തിന്റെ പേരും വിലയും നിർബന്ധമാണ്!");
+    return;
+  }
+  if (itemsData[name]) {
+    alert("ഈ ഐറ്റം നിലവിലുണ്ട്!");
+    return;
+  }
 
   const itemId = db.ref("Items").push().key;
-  db.ref("Items/" + itemId).set({ id: itemId, itemName: name, stock, mrp })
+  db.ref("Items/" + itemId)
+    .set({ id: itemId, itemName: name, stock, mrp })
     .then(() => {
       document.getElementById("invNewName").value = "";
       document.getElementById("invNewStock").value = "";
@@ -237,11 +283,13 @@ function editInvItem(id, currentName, currentStock, currentMrp) {
   const newMrp = prompt("പുതിയ MRP നൽകുക:", currentMrp);
   if (newMrp === null) return;
 
-  db.ref("Items/" + id).update({
-    itemName: normalizeName(newName),
-    stock: toInt(newStock),
-    mrp: toMoney(newMrp)
-  }).then(() => showToast("വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു!", "success"));
+  db.ref("Items/" + id)
+    .update({
+      itemName: normalizeName(newName),
+      stock: toInt(newStock),
+      mrp: toMoney(newMrp)
+    })
+    .then(() => showToast("വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു!", "success"));
 }
 
 function deleteInvItem(id, name) {
@@ -366,6 +414,7 @@ async function submitStockModal() {
 
     let targetItem = itemsData[name];
 
+    // If MRP changed, create/use a variant name "(₹NEW)"
     if (newMrp !== currentMrp) {
       const baseName = name.replace(/\s*\(₹\d+(\.\d+)?\)\s*$/, "").trim();
       const variantName = `${baseName} (₹${newMrp})`;
@@ -383,6 +432,7 @@ async function submitStockModal() {
 
         await db.ref("Items/" + newItemId).set({ id: newItemId, itemName: variantName, stock: 0, mrp: newMrp });
 
+        // Update local cache immediately; listener will also refresh baseStock later
         itemsData[variantName] = newItemObj;
         targetItem = newItemObj;
         name = variantName;
@@ -406,8 +456,8 @@ async function submitStockModal() {
     closeStockModal();
     showToast(`Purchase added: ${name} (+${qty})`, "success", 2500);
     syncPendingOps();
-
   } else {
+    // Return mode
     if (qty > toInt(itemsData[name].stock)) {
       alert("സ്റ്റോക്കിനേക്കാൾ കൂടുതൽ Return നൽകാൻ കഴിയില്ല!");
       return;
