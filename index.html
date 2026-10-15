@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Vanasree Eco Shop Web App</title>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <!-- Google Fonts: Anek Malayalam -->
+  <link href="https://fonts.googleapis.com/css2?family=Anek+Malayalam:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- External CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div id="toast"></div>
+
+  <!-- Login Page -->
+  <div id="loginSection" class="login-container">
+    <h2>Vanasree Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password" oninput="clearSavedHashOnEdit()">
+    <label style="display:block; margin-top:10px;">
+      <input type="checkbox" id="rememberMe"> Remember username & password
+    </label>
+    <button onclick="handleLogin()" style="background:#2E7D32; color:white; border:none; font-weight:bold; margin-top:20px;">LOGIN</button>
+    <p id="loginError" style="color:red; text-align:center; display:none; margin-top:10px;">Invalid Credentials!</p>
+    <p style="font-size:12px; color:#666; text-align:center; margin-top:10px;">
+      First-time default: <b>admin / admin123</b> (password can be changed after login)
+    </p>
+  </div>
+
+  <!-- Main App Page -->
+  <div id="appSection" class="app-container" style="padding:0;">
+    <div style="padding:15px; padding-bottom:0;">
+      <button class="logout-btn" onclick="handleLogout()">Logout</button>
+      <button class="logout-btn" style="background:#FF9800; margin-right:10px;" onclick="changePasswordPrompt()">Change Password</button>
+      <span id="netStatus" class="pill connecting">Connecting...</span>
+
+      <div class="tabs" style="margin-top:25px;">
+        <div class="tab active" onclick="switchTab('salesTab')">Daily Sales</div>
+        <div class="tab" onclick="switchTab('adminTab')">Cash Book</div>
+      </div>
+    </div>
+
+    <!-- DAILY SALES TAB -->
+    <div id="salesTab" class="section active" style="padding:15px;">
+      <h2 style="margin-bottom:25px;">VANASREE, PEPPARA</h2>
+
+      <div id="salesMainMenu">
+        <button class="menu-btn btn-manage-inv" onclick="showSalesSubPage('manageInvPage')">MANAGE INVENTORY (Add/Purchase/Return/Edit)</button>
+        <button class="menu-btn btn-add-sales" onclick="showSalesSubPage('addSalesPage')">ADD SALES DETAILS</button>
+        <button class="menu-btn btn-edit-sales" onclick="showSalesSubPage('editSalesPage')">VIEW / EDIT SALES DETAILS</button>
+        <button class="menu-btn btn-gen-pdf" onclick="showSalesSubPage('genPdfPage')">GENERATE MONTHLY PDF</button>
+      <div class="no-print" style="margin-top: 28px; padding-top: 14px; border-top: 1px dashed #c8e6c9; text-align: center; font-size: 13px; color: #546E7A; letter-spacing: 0.6px;">
+        Designed &amp; Developed by <span style="color: #2E7D32; font-weight: 800; font-size: 14px;">MITHUN C NAIR</span>
+      </div>
+      </div>
+
+      <!-- Manage Inventory -->
+      <div id="manageInvPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
+
+        <div style="background:#e8f5e9; padding:15px; border-radius:5px; margin-bottom:20px;">
+          <h3 style="margin-top:0; border:none; color:#2E7D32;">Add New Item</h3>
+          <div class="flex-row">
+            <input type="text" id="invNewName" placeholder="Item Name" class="flex-item" style="flex:2; min-width:150px;">
+            <input type="number" id="invNewStock" placeholder="Stock" class="flex-item">
+            <input type="number" id="invNewMrp" placeholder="MRP (₹)" class="flex-item">
+            <button class="save-btn flex-item" onclick="addNewInvItem()">ADD</button>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+          <button id="importBtn" onclick="bulkImportItems()" style="background:#FFC107; color:#000; font-weight:bold; padding:12px; border:none; border-radius:5px; flex:1; cursor:pointer; font-size:14px; display:none;">
+            ⚡ IMPORT ALL ITEMS
+          </button>
+          <button onclick="addPurchasePrompt()" style="background:#2E7D32; color:#fff; font-weight:bold; padding:12px; border:none; border-radius:5px; flex:1; cursor:pointer; font-size:14px;">
+            ➕ ADD PURCHASE (പുതിയ സ്റ്റോക്ക് വരവ്)
+          </button>
+          <button onclick="returnStockPrompt()" style="background:#d9534f; color:#fff; font-weight:bold; padding:12px; border:none; border-radius:5px; flex:1; cursor:pointer; font-size:14px;">
+            🔄 RETURN STOCK (തിരികെ നൽകൽ)
+          </button>
+        </div>
+
+        <h3 style="margin-bottom:10px;">Available Items in Stock</h3>
+        <input type="text" id="searchItem" placeholder="Search items..." onkeyup="filterItems()" style="margin-bottom:10px;">
+        <div class="table-responsive">
+          <table id="invTable">
+            <thead><tr><th>Item Name</th><th>Stock</th><th>MRP (₹)</th><th>Action</th></tr></thead>
+            <tbody id="inventoryListBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Add Sales -->
+      <div id="addSalesPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
+        <h3>New Bill Entry</h3>
+        <label>Date:</label>
+        <input type="date" id="saleDate">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; margin-bottom:5px;">
+          <label style="margin:0; font-weight:bold; color:#333;">Select Item:</label>
+          <span id="lblSalesAvailableStock" style="color:#E65100; font-weight:bold; font-size:14px; background:#FFF3E0; padding:4px 10px; border-radius:4px; border:1px solid #FFE0B2;">Stock: 0</span>
+        </div>
+        <select id="salesItemSelect" onchange="updateSalesStockDetails()" style="margin-top:0;"></select>
+
+        <label style="margin-top:10px; display:block; font-weight:bold; color:#333;">Quantity:</label>
+        <input type="number" id="saleQty" placeholder="Enter Qty" oninput="calculateTotalAmount()">
+
+        <h3 style="text-align:center; background:#E8F5E9; padding:15px; border-radius:5px; margin-top:15px;">
+          Total Amount: <span id="saleTotalAmt" style="color:#2E7D32;">₹ 0</span>
+        </h3>
+
+        <button id="btnSaveBill" class="save-btn" style="padding:15px; font-size:16px;" onclick="saveBill(this)">SAVE BILL</button>
+        <p style="text-align:center; font-size:12px; color:#777; margin-top:8px;">
+          Offline ആയാലും SAVE ചെയ്യാം — app close ചെയ്താലും pending data നഷ്ടമാകില്ല.
+        </p>
+      </div>
+
+      <!-- Edit Sales -->
+      <div id="editSalesPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
+        <h3>View / Edit Sales</h3>
+        <div class="flex-row">
+          <input type="date" id="filterSaleDate" onchange="loadSalesList()" class="flex-item" style="flex:2;">
+          <button class="save-btn flex-item" style="background:#2196F3;" onclick="loadSalesList()">LOAD</button>
+        </div>
+        <div class="table-responsive" style="margin-top:15px;">
+          <table id="salesTable">
+            <thead><tr><th>Item Name</th><th>Qty</th><th>Amount</th><th>Action</th></tr></thead>
+            <tbody id="salesListBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Generate Monthly PDF -->
+      <div id="genPdfPage" class="sales-subpage">
+        <button class="back-btn" onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
+        <h3>Generate Monthly PDF Register</h3>
+        <select id="pdfMonth">
+          <option value="01">01 - January</option><option value="02">02 - February</option><option value="03">03 - March</option>
+          <option value="04">04 - April</option><option value="05">05 - May</option><option value="06">06 - June</option>
+          <option value="07">07 - July</option><option value="08">08 - August</option><option value="09">09 - September</option>
+          <option value="10" selected>10 - October</option><option value="11">11 - November</option><option value="12">12 - December</option>
+        </select>
+        <input type="number" id="pdfYear" value="2026">
+        <button class="menu-btn btn-gen-pdf" onclick="printWebPdf()">GENERATE PDF (Preview & Print)</button>
+        <p style="text-align:center; font-size:13px; color:#666;">
+          Tip: Preview കണ്ട ശേഷം <b>Print / Save as PDF</b> ക്ലിക്ക് ചെയ്യാം.
+        </p>
+      </div>
+    </div>
+
+    <!-- CASH BOOK TAB -->
+    <div id="adminTab" class="section" style="background:#f5f5f5; border-radius:0 0 8px 8px;">
+      <div style="background:#4CAF50; color:white; padding:15px; text-align:center; font-weight:bold; font-size:18px;">
+        VANASREE CASH BOOK
+      </div>
+
+      <div class="admin-controls" style="display:flex; gap:10px; justify-content:center; align-items:center; padding:20px; background:#fff; flex-wrap:wrap;">
+        <select id="adminMonth" style="width:auto; min-width:80px;">
+          <option value="01">01</option><option value="02">02</option><option value="03">03</option>
+          <option value="04">04</option><option value="05">05</option><option value="06">06</option>
+          <option value="07">07</option><option value="08">08</option><option value="09">09</option>
+          <option value="10" selected>10</option><option value="11">11</option><option value="12">12</option>
+        </select>
+        <input type="number" id="adminYear" value="2026" style="width:90px;">
+        <button onclick="loadAdminData()" style="width:auto; background:#673AB7; color:white; padding:10px 20px; border-radius:20px; border:none; cursor:pointer; font-weight:bold;">LOAD</button>
+        <button onclick="printAdminPdf()" style="width:auto; background:#D32F2F; color:white; padding:10px 20px; border-radius:20px; border:none; cursor:pointer; font-weight:bold;">PDF (Preview & Print)</button>
+      </div>
+
+      <div class="table-responsive" style="background:#fff;">
+        <table id="adminTable">
+          <thead><tr><th>Date</th><th>Income</th><th>Remitted</th><th>Remarks</th><th>Action</th></tr></thead>
+          <tbody id="cashBookBody"></tbody>
+        </table>
+      </div>
+
+      <div style="background:#fff; padding:20px; margin-top:15px;">
+        <h3 style="text-align:center; color:#9C27B0; border:none; margin-bottom:20px; font-size:16px;">SUMMARY</h3>
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-weight:bold; color:#444; font-size:15px;">
+          <span>Opening Balance:</span><span id="abOpening" style="color:#D32F2F;">₹ 0.00</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-weight:bold; color:#444; font-size:15px;">
+          <span>Income on this month:</span><span id="abIncome" style="color:#388E3C;">₹ 0.00</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:15px; font-weight:bold; color:#444; font-size:15px;">
+          <span>Remittance this month:</span><span id="abRemit" style="color:#1976D2;">₹ 0.00</span>
+        </div>
+        <hr style="border:0; border-top:1px solid #ccc; margin:15px 0;">
+        <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:16px; color:#000;">
+          <span>Closing Balance:</span><span id="abClosing">₹ 0.00</span>
+        </div>
+        <p id="pendingNote" style="margin:10px 0 0; font-size:12px; color:#888; text-align:center;"></p>
+      </div>
+    </div>
+  </div>
+<!-- Purchase / Return Popup Modal -->
+  <div id="stockModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9998; align-items:center; justify-content:center; padding:15px; box-sizing:border-box;">
+    <div style="background:#fff; width:100%; max-width:440px; padding:20px; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,0.3); box-sizing:border-box;">
+      <h3 id="stockModalTitle" style="margin-top:0; color:#2E7D32; border-bottom:2px solid #4CAF50; padding-bottom:8px;">Add Purchase</h3>
+      
+      <label style="font-weight:bold; font-size:14px; display:block; margin-top:8px;">ഐറ്റം തിരയുക / തിരഞ്ഞെടുക്കുക:</label>
+      <input type="text" id="modalItemSearch" placeholder="🔍 പേര് ടൈപ്പ് ചെയ്ത് തിരയാം..." oninput="filterModalItems()" style="margin-bottom:4px; padding:10px;">
+      <select id="modalItemSelect" onchange="onModalItemChange()" style="margin-top:0;"></select>
+      
+      <div id="modalStockInfo" style="font-size:13px; color:#E65100; font-weight:bold; margin:4px 0 10px; background:#FFF3E0; padding:6px 10px; border-radius:4px; border:1px solid #FFE0B2;">
+        നിലവിലെ Stock: 0 | MRP: ₹0.00
+      </div>
+
+      <div id="modalMrpWrap">
+        <label style="font-weight:bold; font-size:14px; display:block;">MRP (₹) <span style="font-weight:normal; font-size:12px; color:#555;">(വില മാറിയെങ്കിൽ പുതിയ വില നൽകുക)</span>:</label>
+        <input type="number" id="modalMrpInput" step="0.01" placeholder="MRP">
+      </div>
+
+      <label style="font-weight:bold; font-size:14px; display:block; margin-top:8px;">എണ്ണം (Quantity):</label>
+      <input type="number" id="modalQtyInput" placeholder="എത്ര എണ്ണം?">
+
+      <label style="font-weight:bold; font-size:14px; display:block; margin-top:8px;">തീയതി (Date):</label>
+      <input type="date" id="modalDateInput">
+
+      <div style="display:flex; gap:10px; margin-top:18px;">
+        <button onclick="closeStockModal()" style="background:#607D8B; color:#fff; border:none; font-weight:bold; flex:1; cursor:pointer; border-radius:4px;">CANCEL</button>
+        <button id="modalSubmitBtn" onclick="submitStockModal()" style="background:#2E7D32; color:#fff; border:none; font-weight:bold; flex:1; cursor:pointer; border-radius:4px;">SAVE</button>
+      </div>
+    </div>
+  </div>
+  <!-- Print Preview & Print Area -->
+  <div id="printArea"></div>
+  <!-- Remittance Edit Modal -->
+  <div id="remitModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center; padding:20px; box-sizing:border-box;">
+    <div style="background:#fff; width:100%; max-width:400px; padding:20px; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,0.2);">
+      <h3 style="margin-top:0; color:#1976D2;">Edit Remittance</h3>
+      <p id="remitModalDate" style="font-size:14px; color:#555; margin-bottom:15px;"></p>
+      
+      <div style="margin-bottom:15px; text-align:left;">
+        <label style="font-weight:bold; font-size:14px;">Amount:</label>
+        <input type="number" id="remitModalAmt" style="width:100%; padding:10px; margin-top:5px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:16px;" placeholder="Enter amount">
+      </div>
+      
+      <div style="margin-bottom:20px; text-align:left;">
+        <label style="font-weight:bold; font-size:14px;">Remarks:</label>
+        <input type="text" id="remitModalRemarks" style="width:100%; padding:10px; margin-top:5px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:16px;" placeholder="Enter remarks (optional)">
+      </div>
+      
+      <div style="display:flex; gap:10px;">
+        <button onclick="closeRemitModal()" style="flex:1; padding:12px; border:none; border-radius:4px; background:#e0e0e0; color:#333; font-weight:bold; cursor:pointer;">CANCEL</button>
+        <button onclick="submitRemitModal()" style="flex:1; padding:12px; border:none; border-radius:4px; background:#1976D2; color:white; font-weight:bold; cursor:pointer;">SAVE</button>
+      </div>
+    </div>
+  </div>
+  <!-- Modular JavaScript Files -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script src="inventory.js"></script>
+  <script src="sales.js"></script>
+  <script src="cashbook.js"></script>
+  <script src="pdf.js"></script>
+</body>
+</html>
