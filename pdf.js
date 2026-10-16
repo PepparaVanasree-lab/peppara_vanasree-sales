@@ -125,18 +125,17 @@ function _applyAutoFit(mode) {
   wrap.style.transform = "";
   wrap.style.zoom = "";
 
-  const A4_PORTRAIT_W = 794,
-    A4_PORTRAIT_H = 1123;
+  const A4_PORTRAIT_W = 794;
   const A4_LAND_W = 1123;
 
   const contentW = wrap.scrollWidth || 1;
-  const contentH = wrap.scrollHeight || 1;
+  // const contentH = wrap.scrollHeight || 1; // no longer needed for cashbook mode
 
   let scale = 1;
   if (mode === "cashbook") {
+    // Scale only by width for A4 portrait; allow height to overflow to multiple pages
     const maxW = A4_PORTRAIT_W - 20;
-    const maxH = A4_PORTRAIT_H - 20;
-    scale = Math.min(1, maxW / contentW, maxH / contentH);
+    scale = Math.min(1, maxW / contentW);
   } else {
     const maxW = A4_LAND_W - 20;
     scale = Math.min(1, maxW / contentW);
@@ -159,7 +158,7 @@ function showPrintPreview(contentHtml, mode) {
       <span style="font-size:16px; font-weight:bold;">📄 Print Preview</span>
       <button class="btn-do-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
     </div>
-  `;
+ `;
 
   const printArea = document.getElementById("printArea");
   printArea.innerHTML = toolbarHtml + contentHtml;
@@ -262,7 +261,7 @@ async function printWebPdf() {
     if (pendingCount > 0) {
       alert(
         "ശ്രദ്ധിക്കുക: ഓഫ്‌ലൈനിൽ സേവ് ചെയ്ത വിവരങ്ങൾ സിങ്ക് ആകാൻ ബാക്കിയുണ്ട്! " +
-        "ഇന്റർനെറ്റ് ഓൺ ആക്കി Sync പൂർത്തിയായ ശേഷം PDF എടുക്കുക."
+          "ഇന്റർനെറ്റ് ഓൺ ആക്കി Sync പൂർത്തിയായ ശേഷം PDF എടുക്കുക."
       );
       return;
     }
@@ -290,7 +289,7 @@ async function printWebPdf() {
     const futureReturnsByItem = {};
     const futurePurchasesByItem = {};
 
-    // Sales: per-item, per-day for target month; and future totals for back-calculating stock
+    // Sales
     sSnap.forEach((c) => {
       const v = c.val();
       if (!v || !v.date || !v.itemName) return;
@@ -314,7 +313,7 @@ async function printWebPdf() {
       }
     });
 
-    // Items: unique by name
+    // Items
     iSnap.forEach((c) => {
       const it = c.val();
       if (it && it.itemName) {
@@ -325,9 +324,9 @@ async function printWebPdf() {
     });
     const iList = Object.values(uniqueItemsMap);
 
-    // Returns: per-month
+    // Returns
     rAllSnap.forEach((monthNode) => {
-      const mKey = monthNode.key; // "YYYY-MM"
+      const mKey = monthNode.key;
       monthNode.forEach((c) => {
         const v = c.val();
         if (!v || !v.itemName) return;
@@ -342,9 +341,9 @@ async function printWebPdf() {
       });
     });
 
-    // Purchases: per-month
+    // Purchases
     pAllSnap.forEach((monthNode) => {
-      const mKey = monthNode.key; // "YYYY-MM"
+      const mKey = monthNode.key;
       monthNode.forEach((c) => {
         const v = c.val();
         if (!v || !v.itemName) return;
@@ -369,7 +368,20 @@ async function printWebPdf() {
     const days = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
     const shortY = y.toString().slice(-2);
     const monthName =
-      ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m, 10) - 1];
+      [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ][parseInt(m, 10) - 1];
 
     let html = `
       <div class="print-wrap">
@@ -388,7 +400,10 @@ async function printWebPdf() {
     `;
 
     for (let i = 1; i <= days; i++) {
-      html += `<th class="rotate-text"><span>${String(i).padStart(2, "0")}/${m}/${shortY}</span></th>`;
+      html += `<th class="rotate-text"><span>${String(i).padStart(
+        2,
+        "0"
+      )}/${m}/${shortY}</span></th>`;
     }
 
     html += `
@@ -438,14 +453,19 @@ async function printWebPdf() {
       const fRet = futureReturnsByItem[it.itemName] || 0;
       const fPur = futurePurchasesByItem[it.itemName] || 0;
 
-      // Back-calc closing stock at end of this month
       const cl = Math.max(0, currentLiveStock + fSales + fRet - fPur);
       const clBfRet = cl + retQ;
       const tot = clBfRet + iTotQ;
       const openingStock = Math.max(0, tot - purQ);
 
-      // Skip items with absolutely no activity & no stock in this month
-      if (openingStock === 0 && purQ === 0 && iTotQ === 0 && retQ === 0 && cl === 0) {
+      // Skip items with no activity or stock for this month
+      if (
+        openingStock === 0 &&
+        purQ === 0 &&
+        iTotQ === 0 &&
+        retQ === 0 &&
+        cl === 0
+      ) {
         return;
       }
 
@@ -470,7 +490,7 @@ async function printWebPdf() {
       `;
     });
 
-    // Totals row (per-day amount & grand total)
+    // totals row
     html += `<tr>
       <td colspan="6" style="text-align:right; font-weight:bold; padding-right:4px;">Total</td>`;
 
@@ -496,7 +516,7 @@ async function printWebPdf() {
 }
 
 // =========================
-// Current Stock PDF Generation (A4 Portrait)
+// Current Stock PDF Generation (A4 Portrait, multi-page, no height shrinking)
 // =========================
 async function printStockPdf() {
   await queueReady;
@@ -531,21 +551,22 @@ async function printStockPdf() {
       return;
     }
 
-    // A–Z order
+    // Sort A–Z
     itemsList.sort((a, b) => a.name.localeCompare(b.name));
 
     // Today's date
     const today = new Date();
-    const dateString = `${today.getDate().toString().padStart(2, "0")}/${(today.getMonth() + 1)
-      .toString()
-      .padStart(2, "0")}/${today.getFullYear()}`;
+    const dateString = `${today.getDate().toString().padStart(
+      2,
+      "0"
+    )}/${(today.getMonth() + 1).toString().padStart(2, "0")}/${today.getFullYear()}`;
 
     let html = `
       <div class="print-wrap">
         <h2 class="print-title">Peppara Eco tourism EDC</h2>
         <h3 class="print-sub">Vanasree - Current Stock Status (As on ${dateString})</h3>
 
-        <table class="print-table" style="width: 80%; margin: 0 auto; font-size: 11px;">
+        <table class="print-table" style="width:95%; margin:0 auto; font-size:14px;">
           <thead>
             <tr>
               <th style="width: 10%;">Sl No</th>
@@ -577,7 +598,7 @@ async function printStockPdf() {
       </div>
     `;
 
-    // Use cashbook (A4 portrait) style for Stock PDF
+    // Use cashbook (A4 portrait) styling; _applyAutoFit will only scale by width
     showPrintPreview(html, "cashbook");
   } catch (err) {
     console.error("Stock PDF generation error:", err);
