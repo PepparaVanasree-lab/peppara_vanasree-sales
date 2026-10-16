@@ -92,7 +92,9 @@ async function saveBill(btn) {
 
   if (existingPendingAdd) {
     existingPendingAdd.qty = (Number(existingPendingAdd.qty) || 0) + qtyNum;
-    existingPendingAdd.amount = Number(((Number(existingPendingAdd.amount) || 0) + addedAmt).toFixed(2));
+    existingPendingAdd.amount = Number(
+      ((Number(existingPendingAdd.amount) || 0) + addedAmt).toFixed(2)
+    );
 
     if (existingPendingAdd.saleData) {
       existingPendingAdd.saleData.quantity = existingPendingAdd.qty;
@@ -101,7 +103,11 @@ async function saveBill(btn) {
 
     await queuePut(existingPendingAdd);
 
-    showToast(`മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${existingPendingAdd.qty})`, "success", 2500);
+    showToast(
+      `മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${existingPendingAdd.qty})`,
+      "success",
+      2500
+    );
     syncPendingOps();
     return;
   }
@@ -109,7 +115,11 @@ async function saveBill(btn) {
   // 2) If online, check server for same-day same-item and queue an editSale instead of creating duplicate
   if (isConnected) {
     try {
-      const snap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
+      const snap = await db
+        .ref("Sales")
+        .orderByChild("date")
+        .equalTo(formattedDate)
+        .once("value");
 
       let matchedServerSale = null;
       let matchedServerSaleId = null;
@@ -119,7 +129,11 @@ async function saveBill(btn) {
         const sId = (s && s.id) || child.key;
 
         // Do not merge into something the user has already deleted locally (pending delete)
-        if (s && !summary.pendingDeleteSaleIds.has(sId) && (s.itemName || "").trim() === name) {
+        if (
+          s &&
+          !summary.pendingDeleteSaleIds.has(sId) &&
+          (s.itemName || "").trim() === name
+        ) {
           if (!matchedServerSale) {
             matchedServerSale = s;
             matchedServerSaleId = sId;
@@ -131,8 +145,12 @@ async function saveBill(btn) {
         // If an editSale already exists locally for this saleId, extend it further.
         const existingEditOp = await queueGet("editSale:" + matchedServerSaleId);
 
-        const baseOldQty = existingEditOp ? existingEditOp.oldQty : (Number(matchedServerSale.quantity) || 0);
-        const baseOldAmt = existingEditOp ? existingEditOp.oldAmt : (Number(matchedServerSale.amount) || 0);
+        const baseOldQty = existingEditOp
+          ? existingEditOp.oldQty
+          : Number(matchedServerSale.quantity) || 0;
+        const baseOldAmt = existingEditOp
+          ? existingEditOp.oldAmt
+          : Number(matchedServerSale.amount) || 0;
 
         const currentQty = existingEditOp ? existingEditOp.newQty : baseOldQty;
         const currentAmt = existingEditOp ? existingEditOp.newAmt : baseOldAmt;
@@ -156,7 +174,11 @@ async function saveBill(btn) {
           amtDiff: Number((newAmt - baseOldAmt).toFixed(2))
         });
 
-        showToast(`മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${newQty})`, "success", 2500);
+        showToast(
+          `മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${newQty})`,
+          "success",
+          2500
+        );
         syncPendingOps();
         return;
       }
@@ -228,13 +250,21 @@ async function loadSalesList() {
         const s = op.saleData;
         if (!s) continue;
 
+        const safeName = escHtml(s.itemName);
+
         tbody.innerHTML += `<tr style="background:#FFFDE7;">
-          <td style="text-align:left;">${s.itemName} <span class="badge-pending">PENDING</span></td>
+          <td style="text-align:left;">${safeName} <span class="badge-pending">PENDING</span></td>
           <td>${s.quantity}</td>
           <td>₹ ${Number(s.amount).toFixed(2)}</td>
           <td>
-            <button class="edit-btn" onclick='editSale(${js(s.id)}, ${js(s.itemName)}, ${s.quantity}, ${s.amount}, ${js(s.date)})'>Edit</button>
-            <button class="delete-btn" onclick='cancelPendingSale(${js(op.opId)})'>Cancel</button>
+            <button class="edit-btn" onclick='editSale(${js(
+              s.id
+            )}, ${js(s.itemName)}, ${s.quantity}, ${s.amount}, ${js(
+          s.date
+        )})'>Edit</button>
+            <button class="delete-btn" onclick='cancelPendingSale(${js(
+              op.opId
+            )})'>Cancel</button>
           </td>
         </tr>`;
       }
@@ -262,13 +292,23 @@ async function loadSalesList() {
           badge = ` <span class="badge-pending">EDITED</span>`;
         }
 
+        const safeName = escHtml(sale.itemName);
+
         tbody.innerHTML += `<tr>
-          <td style="text-align:left;">${sale.itemName}${badge}</td>
+          <td style="text-align:left;">${safeName}${badge}</td>
           <td>${q}</td>
           <td>₹ ${a.toFixed(2)}</td>
           <td>
-            <button class="edit-btn" onclick='editSale(${js(sale.id)}, ${js(sale.itemName)}, ${q}, ${a}, ${js(sale.date)})'>Edit</button>
-            <button class="delete-btn" onclick='deleteSale(${js(sale.id)}, ${js(sale.itemName)}, ${q}, ${a}, ${js(sale.date)})'>Delete</button>
+            <button class="edit-btn" onclick='editSale(${js(
+              sale.id
+            )}, ${js(sale.itemName)}, ${q}, ${a}, ${js(
+          sale.date
+        )})'>Edit</button>
+            <button class="delete-btn" onclick='deleteSale(${js(
+              sale.id
+            )}, ${js(sale.itemName)}, ${q}, ${a}, ${js(
+          sale.date
+        )})'>Delete</button>
           </td>
         </tr>`;
       }

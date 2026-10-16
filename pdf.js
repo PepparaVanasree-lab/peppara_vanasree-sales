@@ -74,7 +74,6 @@ function setPrintMode(mode) {
       `
       #printArea { max-width: 800px; } 
       .print-title { font-size: 18px; margin: 0 0 10px; text-align: center; color:#000; }
-      /* ടേബിൾ നടുവിലാക്കാൻ വീതി 90% ആക്കി margin auto കൊടുത്തു */
       .print-meta { display:flex; justify-content:space-between; margin: 4px auto 12px; width: 90%; font-size: 13px; font-weight: 700; }
       .print-table { font-size: 13px; width: 90%; margin: 0 auto; } 
       .print-table th, .print-table td { padding: 8px; }
@@ -126,7 +125,8 @@ function _applyAutoFit(mode) {
   wrap.style.transform = "";
   wrap.style.zoom = "";
 
-  const A4_PORTRAIT_W = 794, A4_PORTRAIT_H = 1123;
+  const A4_PORTRAIT_W = 794,
+    A4_PORTRAIT_H = 1123;
   const A4_LAND_W = 1123;
 
   const contentW = wrap.scrollWidth || 1;
@@ -189,6 +189,9 @@ window.addEventListener("afterprint", () => {
   if (_pdfPreviewMode) _applyAutoFit(_pdfPreviewMode);
 });
 
+// =========================
+// Cashbook PDF (A4 Portrait)
+// =========================
 function printAdminPdf() {
   const rows = document.querySelectorAll("#cashBookBody tr");
   if (rows.length === 0) {
@@ -196,9 +199,12 @@ function printAdminPdf() {
     return;
   }
 
+  const month = document.getElementById("adminMonth").value;
+  const year = document.getElementById("adminYear").value;
+
   let html = `
     <div class="print-wrap">
-      <h2 class="print-title">Peppara Vanasree Cash Book (${document.getElementById("adminMonth").value}/${document.getElementById("adminYear").value})</h2>
+      <h2 class="print-title">Peppara Vanasree Cash Book (${month}/${year})</h2>
 
       <div class="print-meta">
         <div>
@@ -214,7 +220,6 @@ function printAdminPdf() {
       <table class="print-table">
         <thead>
           <tr>
-            <!-- കോളങ്ങളുടെ വീതി തുല്യമായി ക്രമീകരിച്ചു -->
             <th style="width: 20%;">Date</th>
             <th style="width: 20%;">Income</th>
             <th style="width: 20%;">Remitted</th>
@@ -232,7 +237,6 @@ function printAdminPdf() {
           <td>${c[0].innerText}</td>
           <td>${c[1].innerText}</td>
           <td>${c[2].innerText}</td>
-          <!-- Remarks കോളം സെന്റർ ചെയ്തു -->
           <td>${c[3].innerText}</td>
         </tr>
       `;
@@ -244,14 +248,22 @@ function printAdminPdf() {
   showPrintPreview(html, "cashbook");
 }
 
+// =========================
+// Monthly Sales + Stock Register (A4 Landscape)
+// =========================
 async function printWebPdf() {
   await queueReady;
+
+  // For official monthly register: ensure no pending offline data
   if (pendingCount > 0) {
     if (isConnected) {
       await syncPendingOps();
     }
     if (pendingCount > 0) {
-      alert("ശ്രദ്ധിക്കുക: ഓഫ്‌ലൈനിൽ സേവ് ചെയ്ത വിവരങ്ങൾ സിങ്ക് ആകാൻ ബാക്കിയുണ്ട്! ഇന്റർനെറ്റ് ഓൺ ആക്കി Sync പൂർത്തിയായ ശേഷം PDF എടുക്കുക.");
+      alert(
+        "ശ്രദ്ധിക്കുക: ഓഫ്‌ലൈനിൽ സേവ് ചെയ്ത വിവരങ്ങൾ സിങ്ക് ആകാൻ ബാക്കിയുണ്ട്! " +
+        "ഇന്റർനെറ്റ് ഓൺ ആക്കി Sync പൂർത്തിയായ ശേഷം PDF എടുക്കുക."
+      );
       return;
     }
   }
@@ -278,6 +290,7 @@ async function printWebPdf() {
     const futureReturnsByItem = {};
     const futurePurchasesByItem = {};
 
+    // Sales: per-item, per-day for target month; and future totals for back-calculating stock
     sSnap.forEach((c) => {
       const v = c.val();
       if (!v || !v.date || !v.itemName) return;
@@ -301,6 +314,7 @@ async function printWebPdf() {
       }
     });
 
+    // Items: unique by name
     iSnap.forEach((c) => {
       const it = c.val();
       if (it && it.itemName) {
@@ -311,29 +325,37 @@ async function printWebPdf() {
     });
     const iList = Object.values(uniqueItemsMap);
 
+    // Returns: per-month
     rAllSnap.forEach((monthNode) => {
-      const mKey = monthNode.key;
+      const mKey = monthNode.key; // "YYYY-MM"
       monthNode.forEach((c) => {
         const v = c.val();
         if (!v || !v.itemName) return;
         const name = norm(v.itemName);
         const q = parseInt(v.quantity, 10) || 0;
 
-        if (mKey === targetMonthKey) retMap[name] = (retMap[name] || 0) + q;
-        else if (mKey > targetMonthKey) futureReturnsByItem[name] = (futureReturnsByItem[name] || 0) + q;
+        if (mKey === targetMonthKey) {
+          retMap[name] = (retMap[name] || 0) + q;
+        } else if (mKey > targetMonthKey) {
+          futureReturnsByItem[name] = (futureReturnsByItem[name] || 0) + q;
+        }
       });
     });
 
+    // Purchases: per-month
     pAllSnap.forEach((monthNode) => {
-      const mKey = monthNode.key;
+      const mKey = monthNode.key; // "YYYY-MM"
       monthNode.forEach((c) => {
         const v = c.val();
         if (!v || !v.itemName) return;
         const name = norm(v.itemName);
         const q = parseInt(v.quantity, 10) || 0;
 
-        if (mKey === targetMonthKey) purMap[name] = (purMap[name] || 0) + q;
-        else if (mKey > targetMonthKey) futurePurchasesByItem[name] = (futurePurchasesByItem[name] || 0) + q;
+        if (mKey === targetMonthKey) {
+          purMap[name] = (purMap[name] || 0) + q;
+        } else if (mKey > targetMonthKey) {
+          futurePurchasesByItem[name] = (futurePurchasesByItem[name] || 0) + q;
+        }
       });
     });
 
@@ -383,7 +405,7 @@ async function printWebPdf() {
 
     let sl = 1;
     let gTot = 0;
-    let dTot = new Array(days).fill(0);
+    const dTot = new Array(days).fill(0);
 
     iList.forEach((it) => {
       if (!it || !it.itemName) return;
@@ -416,18 +438,23 @@ async function printWebPdf() {
       const fRet = futureReturnsByItem[it.itemName] || 0;
       const fPur = futurePurchasesByItem[it.itemName] || 0;
 
+      // Back-calc closing stock at end of this month
       const cl = Math.max(0, currentLiveStock + fSales + fRet - fPur);
       const clBfRet = cl + retQ;
       const tot = clBfRet + iTotQ;
       const openingStock = Math.max(0, tot - purQ);
-// ആ മാസം സ്റ്റോക്കും വിൽപ്പനയും ഇല്ലാത്ത ഉൽപ്പന്നങ്ങളെ PDF-ൽ നിന്നും ഒഴിവാക്കാൻ
+
+      // Skip items with absolutely no activity & no stock in this month
       if (openingStock === 0 && purQ === 0 && iTotQ === 0 && retQ === 0 && cl === 0) {
-        return; 
+        return;
       }
+
+      const safeName = escHtml(it.itemName);
+
       html += `
         <tr>
           <td>${sl++}</td>
-          <td style="text-align:left;">${it.itemName}</td>
+          <td style="text-align:left;">${safeName}</td>
           <td>${parseFloat(it.mrp || 0).toFixed(2)}</td>
           <td>${openingStock}</td>
           <td>${purQ > 0 ? purQ : ""}</td>
@@ -443,12 +470,13 @@ async function printWebPdf() {
       `;
     });
 
+    // Totals row (per-day amount & grand total)
     html += `<tr>
       <td colspan="6" style="text-align:right; font-weight:bold; padding-right:4px;">Total</td>`;
 
     for (let i = 0; i < days; i++) {
       html += `<td class="rotate-text" style="font-weight:bold; color:#D32F2F;">
-        <span>${dTot[i] > 0 ? ("₹" + dTot[i].toFixed(2)) : ""}</span>
+        <span>${dTot[i] > 0 ? "₹" + dTot[i].toFixed(2) : ""}</span>
       </td>`;
     }
 
@@ -461,9 +489,98 @@ async function printWebPdf() {
     html += `</tbody></table></div>`;
 
     showPrintPreview(html, "monthly");
-
   } catch (err) {
     console.error("PDF generation error:", err);
     showToast("Failed to generate PDF", "error", 2500);
+  }
+}
+
+// =========================
+// Current Stock PDF Generation (A4 Portrait)
+// =========================
+async function printStockPdf() {
+  await queueReady;
+
+  try {
+    const [iSnap, summary] = await Promise.all([
+      db.ref("Items").once("value"),
+      getPendingSummary()
+    ]);
+
+    const deltaById = summary.stockDeltaByItemId || {};
+
+    const itemsList = [];
+    iSnap.forEach((c) => {
+      const it = c.val();
+      if (it && it.itemName) {
+        const id = it.id || c.key;
+        const baseStock = parseInt(it.stock || 0, 10) || 0;
+        const delta = deltaById[id] || 0;
+        const liveStock = Math.max(0, baseStock + delta);
+
+        itemsList.push({
+          name: (it.itemName || "").trim(),
+          mrp: parseFloat(it.mrp || 0),
+          stock: liveStock
+        });
+      }
+    });
+
+    if (itemsList.length === 0) {
+      alert("സ്റ്റോക്കിൽ ഉൽപ്പന്നങ്ങൾ ഒന്നുമില്ല!");
+      return;
+    }
+
+    // A–Z order
+    itemsList.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Today's date
+    const today = new Date();
+    const dateString = `${today.getDate().toString().padStart(2, "0")}/${(today.getMonth() + 1)
+      .toString()
+      .padStart(2, "0")}/${today.getFullYear()}`;
+
+    let html = `
+      <div class="print-wrap">
+        <h2 class="print-title">Peppara Eco tourism EDC</h2>
+        <h3 class="print-sub">Vanasree - Current Stock Status (As on ${dateString})</h3>
+
+        <table class="print-table" style="width: 80%; margin: 0 auto; font-size: 11px;">
+          <thead>
+            <tr>
+              <th style="width: 10%;">Sl No</th>
+              <th style="width: 50%; text-align: left; padding-left: 10px;">Item Name</th>
+              <th style="width: 20%;">MRP (₹)</th>
+              <th style="width: 20%;">Balance Stock</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    let slNo = 1;
+    itemsList.forEach((it) => {
+      const safeName = escHtml(it.name);
+
+      html += `
+        <tr>
+          <td>${slNo++}</td>
+          <td style="text-align: left; padding-left: 10px;">${safeName}</td>
+          <td>${it.mrp.toFixed(2)}</td>
+          <td style="font-weight: bold; ${it.stock <= 0 ? "color: red;" : ""}">${it.stock}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // Use cashbook (A4 portrait) style for Stock PDF
+    showPrintPreview(html, "cashbook");
+  } catch (err) {
+    console.error("Stock PDF generation error:", err);
+    showToast("Failed to generate Stock PDF", "error", 2500);
   }
 }

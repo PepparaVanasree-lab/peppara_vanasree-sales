@@ -78,86 +78,69 @@ function loadItemsFromFirebase() {
   itemsListener = async (snapshot) => {
     const addSalesSelect = document.getElementById("salesItemSelect");
     const invBody = document.getElementById("inventoryListBody");
-    const importBtn = document.getElementById("importBtn");
 
     const prevSelected = addSalesSelect ? addSalesSelect.value : null;
 
     if (addSalesSelect) addSalesSelect.innerHTML = "";
-    invBody.innerHTML = "";
+    if (invBody) invBody.innerHTML = "";
+
     itemsData = {};
 
-    // Build itemsData map (unique by trimmed name)
     snapshot.forEach((child) => {
       const item = child.val();
       if (!item || !item.itemName) return;
 
-      item.id = item.id || child.key; // Guarantee id exists
-
+      item.id = item.id || child.key;
       const cleanName = normalizeName(item.itemName);
-      const stockNum = toInt(item.stock);
-      const mrpNum = toMoney(item.mrp);
-
-      // Detect duplicates (same name, different IDs)
-      if (itemsData[cleanName] && itemsData[cleanName].id !== item.id) {
-        console.warn("Duplicate itemName in DB:", cleanName, itemsData[cleanName].id, item.id);
-      }
-
       item.itemName = cleanName;
-      item.baseStock = stockNum;
-      item.stock = stockNum;
-      item.mrp = mrpNum;
+      item.baseStock = toInt(item.stock);
+      item.stock = toInt(item.stock);
+      item.mrp = toMoney(item.mrp);
 
       itemsData[cleanName] = item;
     });
 
-    // Apply pending-queue stock delta (offline ops)
-    await queueReady;
-    const summary = await getPendingSummary();
-    for (const name in itemsData) {
-      const it = itemsData[name];
-      const delta = summary.stockDeltaByItemId[it.id] || 0;
-      it.stock = Math.max(0, (it.baseStock || 0) + delta);
+    // 1. Immediate UI update (no waiting for offline queue)
+    const updateUI = () => {
+      if (!invBody) return;
+
+      const names = Object.keys(itemsData).sort((a, b) => a.localeCompare(b));
+      let rowsHtml = "";
+      for (const name of names) {
+        const it = itemsData[name];
+        rowsHtml += `<tr>
+          <td style="text-align:left;">${escHtml(it.itemName)}</td>
+          <td style="font-weight:bold;">${it.stock}</td>
+          <td>₹${Number(it.mrp).toFixed(2)}</td>
+          <td>
+            <button class="edit-btn" onclick='editInvItem(${js(it.id)}, ${js(it.itemName)}, ${js(it.stock)}, ${js(it.mrp)})'>Edit</button>
+            <button class="delete-btn" onclick='deleteInvItem(${js(it.id)}, ${js(it.itemName)})'>Delete</button>
+          </td>
+        </tr>`;
+      }
+      invBody.innerHTML = rowsHtml;
+      renderSalesDropdown(prevSelected);
+    };
+
+    updateUI(); // show data as soon as it arrives
+
+    // 2. Apply offline pending ops in background
+    try {
+      await queueReady;
+      const summary = await getPendingSummary();
+      let changed = false;
+      for (const name in itemsData) {
+        const it = itemsData[name];
+        const delta = summary.stockDeltaByItemId[it.id] || 0;
+        if (delta !== 0) {
+          it.stock = Math.max(0, (it.baseStock || 0) + delta);
+          changed = true;
+        }
+      }
+      if (changed) updateUI();
+    } catch (e) {
+      console.log("Offline sync delayed:", e);
     }
-
-    // Import button logic based on missing BULK items
-    const bulk = typeof BULK_DATA !== "undefined" && Array.isArray(BULK_DATA) ? BULK_DATA : [];
-    const total = typeof TOTAL_IMPORT_ITEMS !== "undefined" ? TOTAL_IMPORT_ITEMS : bulk.length;
-    const existing = new Set(Object.keys(itemsData).map(normalizeName));
-    const missingCount = bulk.filter((x) => !existing.has(normalizeName(x[0]))).length;
-
-    if (!bulk.length || missingCount === 0) {
-      importBtn.style.display = "none";
-    } else {
-      importBtn.style.display = "block";
-      importBtn.disabled = false;
-      importBtn.innerText =
-        missingCount === total
-          ? "⚡ IMPORT ALL ITEMS"
-          : `⚡ IMPORT REMAINING ITEMS (${missingCount} left)`;
-    }
-
-    // Render inventory table from unique sorted names
-    const names = Object.keys(itemsData).sort((a, b) => a.localeCompare(b));
-
-    let rowsHtml = "";
-    for (const name of names) {
-      const it = itemsData[name];
-
-      rowsHtml += `<tr>
-        <td style="text-align:left;">${escHtml(it.itemName)}</td>
-        <td style="font-weight:bold;">${it.stock}</td>
-        <td>₹${Number(it.mrp).toFixed(2)}</td>
-        <td>
-          <button class="edit-btn" onclick='editInvItem(${js(it.id)}, ${js(it.itemName)}, ${js(it.baseStock)}, ${js(it.mrp)})'>Edit</button>
-          <button class="delete-btn" onclick='deleteInvItem(${js(it.id)}, ${js(it.itemName)})'>Delete</button>
-        </td>
-      </tr>`;
-    }
-
-    invBody.innerHTML = rowsHtml;
-
-    // Build sales dropdown: hide 0-stock items, keep previous selection visible
-    renderSalesDropdown(prevSelected);
   };
 
   db.ref("Items").on("value", itemsListener);
@@ -174,6 +157,8 @@ async function bulkImportItems() {
   if (!confirm("മുന്നറിയിപ്പ്: ഇത് ക്ലിക്ക് ചെയ്താൽ ബാക്കിയുള്ള എല്ലാ ഐറ്റങ്ങളും ആഡ് ആകുന്നതാണ്. തുടരണമോ?")) return;
 
   const importBtn = document.getElementById("importBtn");
+  if (!importBtn) return;
+
   const originalText = importBtn.innerText;
   importBtn.disabled = true;
 
@@ -248,13 +233,18 @@ async function bulkImportItems() {
 // Inventory CRUD
 // =========================
 function addNewInvItem() {
-  const name = normalizeName(document.getElementById("invNewName").value);
+  let name = normalizeName(document.getElementById("invNewName").value);
   const stock = toInt(document.getElementById("invNewStock").value);
   const mrp = toMoney(document.getElementById("invNewMrp").value);
 
   if (!name || !mrp) {
     alert("ഐറ്റത്തിന്റെ പേരും വിലയും നിർബന്ധമാണ്!");
     return;
+  }
+
+  // പേരിന്റെ അവസാനം വില ഇല്ലെങ്കിൽ അത് ഓട്ടോമാറ്റിക് ആയി ചേർക്കാൻ
+  if (!name.includes(`(₹${mrp})`)) {
+    name = `${name} (₹${mrp})`;
   }
   if (itemsData[name]) {
     alert("ഈ ഐറ്റം നിലവിലുണ്ട്!");
@@ -274,20 +264,30 @@ function addNewInvItem() {
 }
 
 function editInvItem(id, currentName, currentStock, currentMrp) {
-  const newName = prompt("പുതിയ പേര് നൽകുക:", currentName);
-  if (newName === null || normalizeName(newName) === "") return;
+  let newName = prompt("പുതിയ പേര് നൽകുക:", currentName);
+  if (newName === null) return;
+  newName = normalizeName(newName);
+  if (!newName) return;
 
-  const newStock = prompt("സ്റ്റോക്ക് എത്രയാണ്?", currentStock);
-  if (newStock === null) return;
+  // Prevent renaming to a different item that already has this name
+  if (newName !== currentName && itemsData[newName] && itemsData[newName].id !== id) {
+    alert("ഈ പേരിൽ മറ്റൊരു ഐറ്റം നിലവിലുണ്ട്!");
+    return;
+  }
 
-  const newMrp = prompt("പുതിയ MRP നൽകുക:", currentMrp);
-  if (newMrp === null) return;
+  const newStockStr = prompt("സ്റ്റോക്ക് എത്രയാണ്?", currentStock);
+  if (newStockStr === null) return;
+  const newStock = toInt(newStockStr);
+
+  const newMrpStr = prompt("പുതിയ MRP നൽകുക:", currentMrp);
+  if (newMrpStr === null) return;
+  const newMrp = toMoney(newMrpStr);
 
   db.ref("Items/" + id)
     .update({
-      itemName: normalizeName(newName),
-      stock: toInt(newStock),
-      mrp: toMoney(newMrp)
+      itemName: newName,
+      stock: newStock,
+      mrp: newMrp
     })
     .then(() => showToast("വിവരങ്ങൾ അപ്ഡേറ്റ് ചെയ്തു!", "success"));
 }
@@ -315,7 +315,13 @@ function openStockModal(mode) {
 
   document.getElementById("modalItemSearch").value = "";
   document.getElementById("modalQtyInput").value = "";
-  document.getElementById("modalDateInput").value = new Date().toISOString().split("T")[0];
+
+  // Use local date (avoid UTC offset issues)
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  document.getElementById("modalDateInput").value = `${yyyy}-${mm}-${dd}`;
 
   if (mode === "purchase") {
     title.innerText = "➕ Add Purchase (പുതിയ സ്റ്റോക്ക് വരവ്)";
@@ -428,9 +434,17 @@ async function submitStockModal() {
           return;
         }
         const newItemId = db.ref("Items").push().key;
-        const newItemObj = { id: newItemId, itemName: variantName, stock: 0, baseStock: 0, mrp: newMrp };
+        const newItemObj = {
+          id: newItemId,
+          itemName: variantName,
+          stock: 0,
+          baseStock: 0,
+          mrp: newMrp
+        };
 
-        await db.ref("Items/" + newItemId).set({ id: newItemId, itemName: variantName, stock: 0, mrp: newMrp });
+        await db
+          .ref("Items/" + newItemId)
+          .set({ id: newItemId, itemName: variantName, stock: 0, mrp: newMrp });
 
         // Update local cache immediately; listener will also refresh baseStock later
         itemsData[variantName] = newItemObj;
