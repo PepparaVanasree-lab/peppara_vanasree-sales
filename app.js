@@ -821,6 +821,7 @@ window.addEventListener("load", async () => {
     const passEl = document.getElementById("password");
     passEl.value = MASKED_PASS;
     passEl.dataset.savedHash = savedHash;
+    passEl.dataset.savedUser = savedUser;
     document.getElementById("rememberMe").checked = true;
   }
 
