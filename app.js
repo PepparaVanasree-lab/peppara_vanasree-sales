@@ -54,9 +54,7 @@ function flashButton(btn, { state = "success", text = "✔ Done!", ms = 1500 } =
 
   btn.disabled = true;
   btn.classList.remove("btn-saving", "btn-success", "btn-error");
-  btn.classList.add(
-    state === "saving" ? "btn-saving" : state === "error" ? "btn-error" : "btn-success"
-  );
+  btn.classList.add(state === "saving" ? "btn-saving" : state === "error" ? "btn-error" : "btn-success");
   btn.innerHTML = text;
 
   setTimeout(() => {
@@ -94,9 +92,7 @@ function initConnectionMonitor() {
     if (isConnected) syncPendingOps();
   });
 
-  window.addEventListener("offline", () =>
-    showToast("Offline mode: saved changes will sync later", "info", 2500)
-  );
+  window.addEventListener("offline", () => showToast("Offline mode: saved changes will sync later", "info", 2500));
   window.addEventListener("online", () => {
     showToast("Internet connected: syncing...", "success", 2000);
     syncPendingOps();
@@ -139,45 +135,21 @@ function openQueueDb() {
   });
 }
 
+async function queueInit() {
+  try {
+    queueDb = await openQueueDb();
+  } catch {
+    queueDb = null;
+  }
+  _queueReadyResolve?.();
+  await refreshPendingCount();
+}
+
 function lsReadAllMap() {
   return safeJsonParse(localStorage.getItem(QUEUE_LS_KEY) || "{}", {});
 }
 function lsWriteAllMap(map) {
   localStorage.setItem(QUEUE_LS_KEY, JSON.stringify(map));
-}
-
-async function queueInit() {
-  try {
-    const idb = await openQueueDb();
-    queueDb = idb;
-
-    // Migrate any legacy pending ops from localStorage into IndexedDB (one-time).
-    const legacyMap = lsReadAllMap();
-    const legacyOps = Object.values(legacyMap);
-    if (legacyOps.length > 0 && queueDb) {
-      await new Promise((resolve, reject) => {
-        const tx = queueDb.transaction(QUEUE_STORE, "readwrite");
-        const store = tx.objectStore(QUEUE_STORE);
-        legacyOps.forEach((op) => {
-          if (op && op.opId) store.put(op);
-        });
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-      });
-      // Clear localStorage copy after successful migration
-      lsWriteAllMap({});
-    }
-  } catch (err) {
-    console.error("Queue DB init failed; falling back to localStorage only", err);
-    queueDb = null;
-  } finally {
-    _queueReadyResolve?.();
-    try {
-      await refreshPendingCount();
-    } catch (e) {
-      console.error("refreshPendingCount during init failed:", e);
-    }
-  }
 }
 
 async function queuePut(op) {
@@ -261,12 +233,7 @@ async function queueCount() {
 }
 
 async function refreshPendingCount() {
-  try {
-    pendingCount = await queueCount();
-  } catch (e) {
-    console.error("queueCount failed:", e);
-    pendingCount = 0;
-  }
+  pendingCount = await queueCount();
   updateNetBadge();
 
   // Recompute live stock from baseStock + remaining pending queue
@@ -305,8 +272,7 @@ async function getPendingSummary() {
 
   for (const op of ops) {
     if (op.type === "sale") {
-      stockDeltaByItemId[op.itemId] =
-        (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
+      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
 
       const d = op.saleData && op.saleData.date;
       if (d) {
@@ -314,25 +280,18 @@ async function getPendingSummary() {
         pendingSalesByDate[d].push(op);
       }
 
-      pendingIncomeByDateKey[op.dateKey] =
-        (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amount || 0);
+      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amount || 0);
     } else if (op.type === "deleteSale") {
-      stockDeltaByItemId[op.itemId] =
-        (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
+      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
       pendingDeleteSaleIds.add(op.saleId);
-      pendingIncomeByDateKey[op.dateKey] =
-        (pendingIncomeByDateKey[op.dateKey] || 0) - (op.amount || 0);
+      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) - (op.amount || 0);
     } else if (op.type === "editSale") {
-      stockDeltaByItemId[op.itemId] =
-        (stockDeltaByItemId[op.itemId] || 0) - (op.qtyDiff || 0);
-      pendingIncomeByDateKey[op.dateKey] =
-        (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amtDiff || 0);
+      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qtyDiff || 0);
+      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amtDiff || 0);
     } else if (op.type === "return") {
-      stockDeltaByItemId[op.itemId] =
-        (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
+      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
     } else if (op.type === "purchase") {
-      stockDeltaByItemId[op.itemId] =
-        (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
+      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
     } else if (op.type === "remit") {
       pendingRemitByDateKey[op.dateKey] = op.data;
     }
@@ -386,11 +345,7 @@ async function syncPendingOps() {
 async function recalculateDailyTotal(formattedDate, dateKey) {
   if (!formattedDate || !dateKey) return;
 
-  const snap = await db
-    .ref("Sales")
-    .orderByChild("date")
-    .equalTo(formattedDate)
-    .once("value");
+  const snap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
   let sum = 0;
   snap.forEach((c) => {
     const v = c.val();
@@ -409,11 +364,7 @@ async function syncSaleOp(op) {
   const formattedDate = op.formattedDate || (op.saleData && op.saleData.date);
 
   // Find same-date same-item sale on server (merge target)
-  const daySnap = await db
-    .ref("Sales")
-    .orderByChild("date")
-    .equalTo(formattedDate)
-    .once("value");
+  const daySnap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
   let existingServerSale = null;
   let existingServerSaleId = null;
 
@@ -421,11 +372,7 @@ async function syncSaleOp(op) {
     const s = c.val();
     const sId = (s && s.id) || c.key; // child.key fallback (important for legacy rows)
 
-    if (
-      s &&
-      sId !== op.saleId &&
-      (s.itemName || "").trim() === (op.itemName || "").trim()
-    ) {
+    if (s && sId !== op.saleId && (s.itemName || "").trim() === (op.itemName || "").trim()) {
       if (!existingServerSale) {
         existingServerSale = s;
         existingServerSaleId = sId;
@@ -445,14 +392,8 @@ async function syncSaleOp(op) {
 
   const updates = {};
   if (existingServerSale && existingServerSaleId) {
-    const mergedQty =
-      (Number(existingServerSale.quantity) || 0) + (Number(op.qty) || 0);
-    const mergedAmt = Number(
-      (
-        (Number(existingServerSale.amount) || 0) +
-        (Number(op.amount) || 0)
-      ).toFixed(2)
-    );
+    const mergedQty = (Number(existingServerSale.quantity) || 0) + (Number(op.qty) || 0);
+    const mergedAmt = Number(((Number(existingServerSale.amount) || 0) + (Number(op.amount) || 0)).toFixed(2));
     updates["Sales/" + existingServerSaleId + "/id"] = existingServerSaleId;
     updates["Sales/" + existingServerSaleId + "/quantity"] = mergedQty;
     updates["Sales/" + existingServerSaleId + "/amount"] = mergedAmt;
@@ -460,8 +401,7 @@ async function syncSaleOp(op) {
     updates["Sales/" + op.saleId] = op.saleData;
   }
 
-  updates["Items/" + op.itemId + "/stock"] =
-    firebase.database.ServerValue.increment(-op.qty);
+  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
 
   // Atomic sync fix:
   // Delete from queue BEFORE Firebase listener fires; rollback on failure.
@@ -484,14 +424,12 @@ async function syncDeleteSaleOp(op) {
 
   const actualServerSale = snap.val();
   const itemId = actualServerSale.itemId || op.itemId;
-  const actualQtyToRestore =
-    Number(actualServerSale.quantity) || op.qty || 0;
+  const actualQtyToRestore = Number(actualServerSale.quantity) || op.qty || 0;
   const formattedDate = op.formattedDate || actualServerSale.date;
 
   const updates = {};
   updates["Sales/" + op.saleId] = null;
-  updates["Items/" + itemId + "/stock"] =
-    firebase.database.ServerValue.increment(+actualQtyToRestore);
+  updates["Items/" + itemId + "/stock"] = firebase.database.ServerValue.increment(+actualQtyToRestore);
 
   await queueDelete(op.opId);
   try {
@@ -519,8 +457,7 @@ async function syncEditSaleOp(op) {
   const updates = {};
   updates["Sales/" + op.saleId + "/quantity"] = op.newQty;
   updates["Sales/" + op.saleId + "/amount"] = op.newAmt;
-  updates["Items/" + itemId + "/stock"] =
-    firebase.database.ServerValue.increment(-actualQtyDiff);
+  updates["Items/" + itemId + "/stock"] = firebase.database.ServerValue.increment(-actualQtyDiff);
 
   await queueDelete(op.opId);
   try {
@@ -543,9 +480,7 @@ async function syncRemitOp(op) {
 }
 
 async function syncReturnOp(op) {
-  const exists = await db
-    .ref("Returns/" + op.monthKey + "/" + op.returnId)
-    .once("value");
+  const exists = await db.ref("Returns/" + op.monthKey + "/" + op.returnId).once("value");
   if (exists.exists()) {
     await queueDelete(op.opId);
     return;
@@ -553,8 +488,7 @@ async function syncReturnOp(op) {
 
   const updates = {};
   updates["Returns/" + op.monthKey + "/" + op.returnId] = op.data;
-  updates["Items/" + op.itemId + "/stock"] =
-    firebase.database.ServerValue.increment(-op.qty);
+  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
 
   await queueDelete(op.opId);
   try {
@@ -566,9 +500,7 @@ async function syncReturnOp(op) {
 }
 
 async function syncPurchaseOp(op) {
-  const exists = await db
-    .ref("Purchases/" + op.monthKey + "/" + op.purchaseId)
-    .once("value");
+  const exists = await db.ref("Purchases/" + op.monthKey + "/" + op.purchaseId).once("value");
   if (exists.exists()) {
     await queueDelete(op.opId);
     return;
@@ -576,8 +508,7 @@ async function syncPurchaseOp(op) {
 
   const updates = {};
   updates["Purchases/" + op.monthKey + "/" + op.purchaseId] = op.data;
-  updates["Items/" + op.itemId + "/stock"] =
-    firebase.database.ServerValue.increment(+op.qty);
+  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(+op.qty);
 
   await queueDelete(op.opId);
   try {
@@ -589,11 +520,17 @@ async function syncPurchaseOp(op) {
 }
 
 // =========================
-// Authentication (Encrypted Hash Only)
+// Authentication (Encrypted Hash Only) — Multi-User
 // =========================
 const AUTH_PATH = "AppAuth";
-let authConfig = null;
+let authConfig = null;          // { users: { [username]: sha256Hash } }
+let currentUser = null;         // actively logged-in username
 const MASKED_PASS = "********";
+
+const DEFAULT_USERS_PLAINTEXT = {
+  admin: "admin123",
+  secretary: "sec123"
+};
 
 async function sha256(text) {
   const data = new TextEncoder().encode(text);
@@ -602,44 +539,117 @@ async function sha256(text) {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// If user edits the password field (or swaps user), stop trusting a remembered hash
 function clearSavedHashOnEdit() {
   const passInput = document.getElementById("password");
-  if (
-    passInput &&
-    passInput.dataset.savedHash &&
-    passInput.value !== MASKED_PASS
-  ) {
+  if (!passInput) return;
+
+  if (passInput.dataset.savedHash && passInput.value !== MASKED_PASS) {
     delete passInput.dataset.savedHash;
+    delete passInput.dataset.savedUser;
   }
 }
 
+// Build default users -> hashes
+async function buildDefaultUsersHashMap() {
+  const out = {};
+  for (const [u, p] of Object.entries(DEFAULT_USERS_PLAINTEXT)) {
+    out[u] = await sha256(p);
+  }
+  return out;
+}
+
+/**
+ * ensureAuthLoaded()
+ * - New structure: AppAuth = { users: { "admin": "<hash>", "secretary": "<hash>", ... } }
+ * - First load defaults: admin/admin123 + secretary/sec123
+ * - Auto-migrate legacy structure: { username, passwordHash } -> { users: { [username]: passwordHash, secretary: <defaultHash>, (admin if missing): <defaultHash> } }
+ */
 async function ensureAuthLoaded() {
   if (authConfig) return authConfig;
 
   const snap = await db.ref(AUTH_PATH).once("value");
-  if (snap.exists()) {
-    authConfig = snap.val();
+
+  // No auth node yet -> create defaults
+  if (!snap.exists()) {
+    const defaults = await buildDefaultUsersHashMap();
+    authConfig = { users: defaults };
+    await db.ref(AUTH_PATH).set(authConfig);
     return authConfig;
   }
 
-  const defaultUser = "admin";
-  const defaultPass = "admin123";
-  const defaultHash = await sha256(defaultPass);
+  const cfg = snap.val() || {};
 
-  authConfig = { username: defaultUser, passwordHash: defaultHash };
+  // New multi-user structure exists
+  if (cfg.users && typeof cfg.users === "object") {
+    authConfig = { users: { ...cfg.users } };
+
+    // Ensure default accounts exist (won't overwrite any existing changed passwords)
+    const defaults = await buildDefaultUsersHashMap();
+    const missing = {};
+    for (const u of Object.keys(defaults)) {
+      if (!authConfig.users[u]) {
+        authConfig.users[u] = defaults[u];
+        missing[u] = defaults[u];
+      }
+    }
+    if (Object.keys(missing).length) {
+      await db.ref(AUTH_PATH + "/users").update(missing);
+    }
+
+    return authConfig;
+  }
+
+  // Legacy single-user structure -> migrate and preserve existing password
+  if (cfg.username && cfg.passwordHash) {
+    const legacyUser = String(cfg.username).trim();
+    const legacyHash = String(cfg.passwordHash);
+
+    const defaults = await buildDefaultUsersHashMap();
+
+    const users = {};
+    if (legacyUser) users[legacyUser] = legacyHash;
+
+    // Append default secretary (requested)
+    if (!users.secretary) users.secretary = defaults.secretary;
+
+    // Also ensure default admin exists (requested). If legacy user was admin, this does nothing.
+    if (!users.admin) users.admin = defaults.admin;
+
+    authConfig = { users };
+
+    // Replace old structure with new one (removes legacy keys)
+    await db.ref(AUTH_PATH).set(authConfig);
+
+    return authConfig;
+  }
+
+  // Unknown/invalid shape -> reset to defaults
+  const defaults = await buildDefaultUsersHashMap();
+  authConfig = { users: defaults };
   await db.ref(AUTH_PATH).set(authConfig);
   return authConfig;
 }
 
 async function changePasswordPrompt() {
   try {
-    const cfg = await ensureAuthLoaded();
+    if (!currentUser) {
+      showToast("Please login first", "error");
+      return;
+    }
 
-    const oldPass = prompt("Enter OLD password:");
+    const cfg = await ensureAuthLoaded();
+    const userHash = cfg.users?.[currentUser];
+    if (!userHash) {
+      showToast("Current user not found in AppAuth", "error");
+      return;
+    }
+
+    const oldPass = prompt(`Enter OLD password for "${currentUser}":`);
     if (oldPass === null) return;
 
     const oldHash = await sha256(oldPass);
-    if (oldHash !== cfg.passwordHash) {
+    if (oldHash !== userHash) {
       showToast("Old password is wrong!", "error");
       return;
     }
@@ -659,12 +669,21 @@ async function changePasswordPrompt() {
     }
 
     const newHash = await sha256(newPass1);
-    await db.ref(AUTH_PATH + "/passwordHash").set(newHash);
-    authConfig.passwordHash = newHash;
 
-    if (localStorage.getItem("rememberedUser")) {
+    await db.ref(`${AUTH_PATH}/users/${currentUser}`).set(newHash);
+    authConfig.users[currentUser] = newHash;
+
+    // Update remembered hash ONLY if this user is the remembered user
+    if (localStorage.getItem("rememberedUser") === currentUser) {
       localStorage.setItem("rememberedHash", newHash);
       localStorage.removeItem("rememberedPass");
+
+      const passEl = document.getElementById("password");
+      if (passEl) {
+        passEl.dataset.savedHash = newHash;
+        passEl.dataset.savedUser = currentUser;
+        passEl.value = MASKED_PASS;
+      }
     }
 
     showToast("Password updated successfully!", "success");
@@ -676,37 +695,58 @@ async function changePasswordPrompt() {
 
 async function handleLogin() {
   try {
-    const u = document.getElementById("username").value.trim();
+    const userEl = document.getElementById("username");
     const passEl = document.getElementById("password");
-    const p = passEl.value.trim();
-    const remember = document.getElementById("rememberMe").checked;
+
+    const u = (userEl?.value || "").trim();
+    const p = (passEl?.value || "").trim();
+    const remember = !!document.getElementById("rememberMe")?.checked;
 
     document.getElementById("loginError").style.display = "none";
 
     const cfg = await ensureAuthLoaded();
-    const enteredHash =
-      p === MASKED_PASS && passEl.dataset.savedHash
-        ? passEl.dataset.savedHash
-        : await sha256(p);
+    const storedHash = cfg.users?.[u];
 
-    if (u === cfg.username && enteredHash === cfg.passwordHash) {
-      localStorage.removeItem("rememberedPass");
+    // If username not found, fail fast
+    if (!storedHash) {
+      document.getElementById("loginError").style.display = "block";
+      return;
+    }
+
+    // Only trust savedHash if it was saved for THIS username
+    const canUseSavedHash =
+      p === MASKED_PASS &&
+      passEl &&
+      passEl.dataset.savedHash &&
+      passEl.dataset.savedUser === u;
+
+    const enteredHash = canUseSavedHash ? passEl.dataset.savedHash : await sha256(p);
+
+    if (enteredHash === storedHash) {
+      currentUser = u;
+      localStorage.removeItem("rememberedPass"); // legacy cleanup
 
       if (remember) {
         localStorage.setItem("rememberedUser", u);
         localStorage.setItem("rememberedHash", enteredHash);
-        passEl.dataset.savedHash = enteredHash;
-        passEl.value = MASKED_PASS;
+        if (passEl) {
+          passEl.dataset.savedHash = enteredHash;
+          passEl.dataset.savedUser = u;
+          passEl.value = MASKED_PASS;
+        }
       } else {
         localStorage.removeItem("rememberedUser");
         localStorage.removeItem("rememberedHash");
-        delete passEl.dataset.savedHash;
+        if (passEl) {
+          delete passEl.dataset.savedHash;
+          delete passEl.dataset.savedUser;
+        }
       }
 
       document.getElementById("loginSection").style.display = "none";
       document.getElementById("appSection").style.display = "block";
       switchTab("salesTab");
-      showToast("Login successful", "success");
+      showToast(`Login successful (${currentUser})`, "success");
     } else {
       document.getElementById("loginError").style.display = "block";
     }
@@ -717,10 +757,19 @@ async function handleLogin() {
 }
 
 function handleLogout() {
+  currentUser = null;
+
   document.getElementById("appSection").style.display = "none";
   document.getElementById("loginSection").style.display = "block";
-  const err = document.getElementById("loginError");
-  if (err) err.style.display = "none";
+
+  // Do NOT clear remembered credentials here; "Remember me" should persist by design.
+  // But do clear any non-remembered typed password for safety/clarity.
+  const passEl = document.getElementById("password");
+  if (passEl && !localStorage.getItem("rememberedUser")) {
+    passEl.value = "";
+    delete passEl.dataset.savedHash;
+    delete passEl.dataset.savedUser;
+  }
 }
 
 // =========================
@@ -728,20 +777,14 @@ function handleLogout() {
 // =========================
 function switchTab(tabId) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-  document.querySelectorAll(".section").forEach((s) =>
-    s.classList.remove("active")
-  );
+  document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
 
   if (tabId === "salesTab") {
-    document
-      .querySelector(".tabs .tab:nth-child(1)")
-      .classList.add("active");
+    document.querySelector(".tabs .tab:nth-child(1)").classList.add("active");
     document.getElementById("salesTab").classList.add("active");
     showSalesSubPage("salesMainMenu");
   } else {
-    document
-      .querySelector(".tabs .tab:nth-child(2)")
-      .classList.add("active");
+    document.querySelector(".tabs .tab:nth-child(2)").classList.add("active");
     document.getElementById("adminTab").classList.add("active");
     loadAdminData();
   }
@@ -749,9 +792,7 @@ function switchTab(tabId) {
 
 function showSalesSubPage(pageId) {
   document.getElementById("salesMainMenu").style.display = "none";
-  document
-    .querySelectorAll(".sales-subpage")
-    .forEach((page) => (page.style.display = "none"));
+  document.querySelectorAll(".sales-subpage").forEach((page) => (page.style.display = "none"));
 
   if (pageId === "salesMainMenu") {
     document.getElementById("salesMainMenu").style.display = "block";
@@ -783,13 +824,7 @@ window.addEventListener("load", async () => {
     document.getElementById("rememberMe").checked = true;
   }
 
-  // Use local date (not UTC) for today's default
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const today = `${yyyy}-${mm}-${dd}`;
-
+  const today = new Date().toISOString().split("T")[0];
   const saleDate = document.getElementById("saleDate");
   const filterSaleDate = document.getElementById("filterSaleDate");
   if (saleDate) saleDate.value = today;
