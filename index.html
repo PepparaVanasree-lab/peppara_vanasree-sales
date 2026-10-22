@@ -28,6 +28,7 @@
   <!-- Login Page -->
   <div id="loginSection" class="login-container">
     <h2>Vanasree Login</h2>
+
     <input
       type="text"
       id="username"
@@ -36,6 +37,7 @@
       autocapitalize="none"
       spellcheck="false"
     >
+
     <input
       type="password"
       id="password"
@@ -43,19 +45,25 @@
       autocomplete="current-password"
       oninput="clearSavedHashOnEdit()"
     >
+
     <label style="display:block; margin-top:10px;">
       <input type="checkbox" id="rememberMe"> Remember username &amp; password
     </label>
+
     <button onclick="handleLogin()"
             style="background:#2E7D32; color:white; border:none; font-weight:bold; margin-top:20px;">
       LOGIN
     </button>
+
     <p id="loginError"
        style="color:red; text-align:center; display:none; margin-top:10px;">
       Invalid Credentials!
     </p>
+
     <p style="font-size:12px; color:#666; text-align:center; margin-top:10px;">
-      First-time default: <b>admin / admin123</b> (password can be changed after login)
+      First-time defaults:
+      <b>admin / admin123</b> and <b>secretary / sec123</b>
+      (password can be changed after login)
     </p>
   </div>
 
@@ -140,6 +148,7 @@
         <h3 style="margin-bottom:10px;">Available Items in Stock</h3>
         <input type="text" id="searchItem" placeholder="Search items..."
                onkeyup="filterItems()" style="margin-bottom:10px;">
+
         <div class="table-responsive">
           <table id="invTable">
             <thead>
@@ -155,6 +164,7 @@
         <button class="back-btn"
                 onclick="showSalesSubPage('salesMainMenu')">⬅ Back to Menu</button>
         <h3>New Bill Entry</h3>
+
         <label>Date:</label>
         <input type="date" id="saleDate">
 
@@ -167,13 +177,22 @@
             Stock: 0
           </span>
         </div>
+
         <!-- Item Search (Add Sales) -->
-<input type="text"
-       id="salesItemSearch"
-       placeholder="പേര് ടൈപ്പ് ചെയ്ത് തിരയാം..."
-       autocomplete="off"
-       style="margin-top:6px; margin-bottom:6px;">
-        <select id="salesItemSelect" onchange="updateSalesStockDetails()" style="margin-top:0;"></select>
+        <input type="text"
+               id="salesItemSearch"
+               placeholder="പേര് ടൈപ്പ് ചെയ്ത് തിരയാം..."
+               autocomplete="off"
+               autocapitalize="none"
+               spellcheck="false"
+               inputmode="search"
+               enterkeyhint="search"
+               aria-label="Search item"
+               style="margin-top:6px; margin-bottom:6px;">
+
+        <select id="salesItemSelect"
+                onchange="updateSalesStockDetails()"
+                style="margin-top:0;"></select>
 
         <label style="margin-top:10px; display:block; font-weight:bold; color:#333;">
           Quantity:
@@ -188,6 +207,7 @@
         <button id="btnSaveBill" class="save-btn"
                 style="padding:15px; font-size:16px;"
                 onclick="saveBill(this)">SAVE BILL</button>
+
         <p style="text-align:center; font-size:12px; color:#777; margin-top:8px;">
           Offline ആയാലും SAVE ചെയ്യാം — app close ചെയ്താലും pending data നഷ്ടമാകില്ല.
         </p>
@@ -338,7 +358,7 @@
           style="margin-top:0; color:#2E7D32; border-bottom:2px solid #4CAF50; padding-bottom:8px;">
         Add Purchase
       </h3>
-      
+
       <label style="font-weight:bold; font-size:14px; display:block; margin-top:8px;">
         ഐറ്റം തിരയുക / തിരഞ്ഞെടുക്കുക:
       </label>
@@ -346,7 +366,7 @@
              placeholder="🔍 പേര് ടൈപ്പ് ചെയ്ത് തിരയാം..."
              oninput="filterModalItems()" style="margin-bottom:4px; padding:10px;">
       <select id="modalItemSelect" onchange="onModalItemChange()" style="margin-top:0;"></select>
-      
+
       <div id="modalStockInfo"
            style="font-size:13px; color:#E65100; font-weight:bold; margin:4px 0 10px;
                   background:#FFF3E0; padding:6px 10px; border-radius:4px;
@@ -403,7 +423,7 @@
       <h3 style="margin-top:0; color:#1976D2;">Edit Remittance</h3>
       <p id="remitModalDate"
          style="font-size:14px; color:#555; margin-bottom:15px;"></p>
-      
+
       <div style="margin-bottom:15px; text-align:left;">
         <label style="font-weight:bold; font-size:14px;">Amount:</label>
         <input type="number" id="remitModalAmt"
@@ -411,7 +431,7 @@
                       border:1px solid #ccc; border-radius:4px; font-size:16px;"
                placeholder="Enter amount">
       </div>
-      
+
       <div style="margin-bottom:20px; text-align:left;">
         <label style="font-weight:bold; font-size:14px;">Remarks:</label>
         <input type="text" id="remitModalRemarks"
@@ -419,7 +439,7 @@
                       border:1px solid #ccc; border-radius:4px; font-size:16px;"
                placeholder="Enter remarks (optional)">
       </div>
-      
+
       <div style="display:flex; gap:10px;">
         <button onclick="closeRemitModal()"
                 style="flex:1; padding:12px; border:none; border-radius:4px;

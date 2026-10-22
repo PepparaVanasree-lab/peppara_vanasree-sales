@@ -232,6 +232,43 @@ async function queueCount() {
   });
 }
 
+// =========================
+// Sales dropdown refresh locking (prevents UI jumping while typing/selecting)
+// =========================
+let salesDropdownRefreshDeferred = false;
+let salesDropdownFreezeUntil = 0;
+
+function markSalesDropdownInteracting(ms = 1500) {
+  salesDropdownFreezeUntil = Math.max(salesDropdownFreezeUntil, Date.now() + ms);
+}
+
+function isSalesDropdownInteracting() {
+  const activeEl = document.activeElement;
+  if (activeEl && (activeEl.id === "salesItemSelect" || activeEl.id === "salesItemSearch")) return true;
+  return Date.now() < salesDropdownFreezeUntil;
+}
+
+function requestSalesDropdownRefresh() {
+  if (typeof renderSalesDropdown !== "function") return;
+
+  if (isSalesDropdownInteracting()) {
+    salesDropdownRefreshDeferred = true;
+    return;
+  }
+
+  salesDropdownRefreshDeferred = false;
+  renderSalesDropdown();
+}
+
+function flushDeferredSalesDropdownRefresh() {
+  if (!salesDropdownRefreshDeferred) return;
+  if (typeof renderSalesDropdown !== "function") return;
+  if (isSalesDropdownInteracting()) return;
+
+  salesDropdownRefreshDeferred = false;
+  renderSalesDropdown();
+}
+
 async function refreshPendingCount() {
   pendingCount = await queueCount();
   updateNetBadge();
@@ -247,16 +284,9 @@ async function refreshPendingCount() {
         it.stock = Math.max(0, (it.baseStock || 0) + delta);
       }
 
-      // IMPORTANT: keep dropdown in sync with live stock
-      if (typeof renderSalesDropdown === "function") {
-        const activeEl = document.activeElement;
-        // സെർച്ച് ബോക്സോ ഡ്രോപ്പ്ഡൗണോ ഉപയോഗിക്കുമ്പോൾ റിഫ്രഷ് തടയാനുള്ള കോഡ്
-        const isInteracting = activeEl && (activeEl.id === "salesItemSelect" || activeEl.id === "salesItemSearch");
-        
-        if (!isInteracting) {
-          renderSalesDropdown();
-        }
-      }
+      // Keep dropdown in sync with live stock,
+      // but DO NOT refresh it while the user is typing/searching/selecting.
+      requestSalesDropdownRefresh();
 
       if (typeof updateSalesStockDetails === "function") {
         updateSalesStockDetails();
@@ -529,8 +559,8 @@ async function syncPurchaseOp(op) {
 // Authentication (Encrypted Hash Only) — Multi-User
 // =========================
 const AUTH_PATH = "AppAuth";
-let authConfig = null;          // { users: { [username]: sha256Hash } }
-let currentUser = null;         // actively logged-in username
+let authConfig = null; // { users: { [username]: sha256Hash } }
+let currentUser = null; // actively logged-in username
 const MASKED_PASS = "********";
 
 const DEFAULT_USERS_PLAINTEXT = {
@@ -836,6 +866,32 @@ window.addEventListener("load", async () => {
   const filterSaleDate = document.getElementById("filterSaleDate");
   if (saleDate) saleDate.value = today;
   if (filterSaleDate) filterSaleDate.value = today;
+
+  // Hook interactions so a deferred refresh can run right after user finishes
+  const searchEl = document.getElementById("salesItemSearch");
+  const selectEl = document.getElementById("salesItemSelect");
+
+  [searchEl, selectEl].forEach((el) => {
+    if (!el) return;
+
+    el.addEventListener("focus", () => markSalesDropdownInteracting(2500));
+    el.addEventListener("pointerdown", () => markSalesDropdownInteracting(2500));
+    el.addEventListener("keydown", () => markSalesDropdownInteracting(2500));
+
+    // while typing, keep it frozen
+    el.addEventListener("input", () => markSalesDropdownInteracting(2500));
+
+    // after interaction ends, flush any deferred refresh
+    el.addEventListener("blur", () => setTimeout(flushDeferredSalesDropdownRefresh, 0));
+    el.addEventListener("change", () => setTimeout(flushDeferredSalesDropdownRefresh, 0));
+  });
+
+  // Extra safety: if user taps elsewhere, flush (only if not interacting)
+  document.addEventListener(
+    "pointerdown",
+    () => setTimeout(flushDeferredSalesDropdownRefresh, 0),
+    true
+  );
 
   initConnectionMonitor();
   queueInit().catch(() => {});

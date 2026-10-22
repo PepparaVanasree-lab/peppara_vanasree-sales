@@ -41,6 +41,26 @@ function getFormattedDate(dateString) {
   return `${p[2]}/${p[1]}/${p[0]}`;
 }
 
+function clearAddSalesForm() {
+  const qtyEl = document.getElementById("saleQty");
+  const totalEl = document.getElementById("saleTotalAmt");
+
+  if (qtyEl) qtyEl.value = "";
+  if (totalEl) totalEl.innerText = "₹ 0.00";
+
+  // Clear search + reset dropdown
+  if (typeof resetSalesItemSearch === "function") {
+    resetSalesItemSearch();
+  } else {
+    // fallback safety (should exist from inventory.js)
+    const searchEl = document.getElementById("salesItemSearch");
+    if (searchEl) searchEl.value = "";
+    if (typeof renderSalesDropdown === "function") renderSalesDropdown();
+  }
+
+  if (typeof updateSalesStockDetails === "function") updateSalesStockDetails();
+}
+
 // =========================
 // Save Bill (auto-merge: pending → server editSale → new sale)
 // =========================
@@ -52,7 +72,6 @@ async function saveBill(btn) {
 
   const sel = document.getElementById("salesItemSelect");
   const qtyEl = document.getElementById("saleQty");
-  const totalEl = document.getElementById("saleTotalAmt");
 
   const name = (sel?.value || "").trim();
   const item = itemsData ? itemsData[name] : null;
@@ -80,11 +99,8 @@ async function saveBill(btn) {
   const addedAmt = Number((qtyNum * unitMrp).toFixed(2));
   const dateKey = formattedDate.replaceAll("/", "-");
 
-  // UX: immediately reset input (queuePut persists operation anyway)
-  flashButton(btn, { state: "success", text: "✔ ബിൽ സേവ് ചെയ്തു!" });
-  if (qtyEl) qtyEl.value = "";
-    if (totalEl) totalEl.innerText = "₹ 0.00";
-    resetSalesItemSearch();
+  // We consider "success" when the op is safely queued locally.
+  // So we flash/reset AFTER queuePut() succeeds.
 
   // 1) Same-day same-item already pending locally? Merge into the pending sale op.
   const summary = await getPendingSummary();
@@ -93,9 +109,7 @@ async function saveBill(btn) {
 
   if (existingPendingAdd) {
     existingPendingAdd.qty = (Number(existingPendingAdd.qty) || 0) + qtyNum;
-    existingPendingAdd.amount = Number(
-      ((Number(existingPendingAdd.amount) || 0) + addedAmt).toFixed(2)
-    );
+    existingPendingAdd.amount = Number(((Number(existingPendingAdd.amount) || 0) + addedAmt).toFixed(2));
 
     if (existingPendingAdd.saleData) {
       existingPendingAdd.saleData.quantity = existingPendingAdd.qty;
@@ -104,11 +118,10 @@ async function saveBill(btn) {
 
     await queuePut(existingPendingAdd);
 
-    showToast(
-      `മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${existingPendingAdd.qty})`,
-      "success",
-      2500
-    );
+    clearAddSalesForm();
+    flashButton(btn, { state: "success", text: "✔ ബിൽ സേവ് ചെയ്തു!" });
+
+    showToast(`മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${existingPendingAdd.qty})`, "success", 2500);
     syncPendingOps();
     return;
   }
@@ -116,11 +129,7 @@ async function saveBill(btn) {
   // 2) If online, check server for same-day same-item and queue an editSale instead of creating duplicate
   if (isConnected) {
     try {
-      const snap = await db
-        .ref("Sales")
-        .orderByChild("date")
-        .equalTo(formattedDate)
-        .once("value");
+      const snap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
 
       let matchedServerSale = null;
       let matchedServerSaleId = null;
@@ -146,12 +155,8 @@ async function saveBill(btn) {
         // If an editSale already exists locally for this saleId, extend it further.
         const existingEditOp = await queueGet("editSale:" + matchedServerSaleId);
 
-        const baseOldQty = existingEditOp
-          ? existingEditOp.oldQty
-          : Number(matchedServerSale.quantity) || 0;
-        const baseOldAmt = existingEditOp
-          ? existingEditOp.oldAmt
-          : Number(matchedServerSale.amount) || 0;
+        const baseOldQty = existingEditOp ? existingEditOp.oldQty : Number(matchedServerSale.quantity) || 0;
+        const baseOldAmt = existingEditOp ? existingEditOp.oldAmt : Number(matchedServerSale.amount) || 0;
 
         const currentQty = existingEditOp ? existingEditOp.newQty : baseOldQty;
         const currentAmt = existingEditOp ? existingEditOp.newAmt : baseOldAmt;
@@ -175,16 +180,16 @@ async function saveBill(btn) {
           amtDiff: Number((newAmt - baseOldAmt).toFixed(2))
         });
 
-        showToast(
-          `മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${newQty})`,
-          "success",
-          2500
-        );
+        clearAddSalesForm();
+        flashButton(btn, { state: "success", text: "✔ ബിൽ സേവ് ചെയ്തു!" });
+
+        showToast(`മുമ്പത്തെ ബില്ലിനൊപ്പം ചേർത്തു! (ആകെ എണ്ണം: ${newQty})`, "success", 2500);
         syncPendingOps();
         return;
       }
     } catch (e) {
       console.warn("Could not check existing sales:", e);
+      // fall through to creating a new queued sale
     }
   }
 
@@ -212,6 +217,9 @@ async function saveBill(btn) {
     saleData
   });
 
+  clearAddSalesForm();
+  flashButton(btn, { state: "success", text: "✔ ബിൽ സേവ് ചെയ്തു!" });
+
   syncPendingOps();
 }
 
@@ -222,7 +230,6 @@ async function loadSalesList() {
   const dateRaw = document.getElementById("filterSaleDate")?.value;
   const formattedDate = getFormattedDate(dateRaw);
   const tbody = document.getElementById("salesListBody");
-
   if (!tbody) return;
 
   if (!formattedDate) {
@@ -258,14 +265,8 @@ async function loadSalesList() {
           <td>${s.quantity}</td>
           <td>₹ ${Number(s.amount).toFixed(2)}</td>
           <td>
-            <button class="edit-btn" onclick='editSale(${js(
-              s.id
-            )}, ${js(s.itemName)}, ${s.quantity}, ${s.amount}, ${js(
-          s.date
-        )})'>Edit</button>
-            <button class="delete-btn" onclick='cancelPendingSale(${js(
-              op.opId
-            )})'>Cancel</button>
+            <button class="edit-btn" onclick='editSale(${js(s.id)}, ${js(s.itemName)}, ${s.quantity}, ${s.amount}, ${js(s.date)})'>Edit</button>
+            <button class="delete-btn" onclick='cancelPendingSale(${js(op.opId)})'>Cancel</button>
           </td>
         </tr>`;
       }
@@ -300,16 +301,8 @@ async function loadSalesList() {
           <td>${q}</td>
           <td>₹ ${a.toFixed(2)}</td>
           <td>
-            <button class="edit-btn" onclick='editSale(${js(
-              sale.id
-            )}, ${js(sale.itemName)}, ${q}, ${a}, ${js(
-          sale.date
-        )})'>Edit</button>
-            <button class="delete-btn" onclick='deleteSale(${js(
-              sale.id
-            )}, ${js(sale.itemName)}, ${q}, ${a}, ${js(
-          sale.date
-        )})'>Delete</button>
+            <button class="edit-btn" onclick='editSale(${js(sale.id)}, ${js(sale.itemName)}, ${q}, ${a}, ${js(sale.date)})'>Edit</button>
+            <button class="delete-btn" onclick='deleteSale(${js(sale.id)}, ${js(sale.itemName)}, ${q}, ${a}, ${js(sale.date)})'>Delete</button>
           </td>
         </tr>`;
       }
