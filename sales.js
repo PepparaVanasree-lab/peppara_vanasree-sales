@@ -83,7 +83,8 @@ async function saveBill(btn) {
   // UX: immediately reset input (queuePut persists operation anyway)
   flashButton(btn, { state: "success", text: "✔ ബിൽ സേവ് ചെയ്തു!" });
   if (qtyEl) qtyEl.value = "";
-  if (totalEl) totalEl.innerText = "₹ 0.00";
+    if (totalEl) totalEl.innerText = "₹ 0.00";
+    resetSalesItemSearch();
 
   // 1) Same-day same-item already pending locally? Merge into the pending sale op.
   const summary = await getPendingSummary();

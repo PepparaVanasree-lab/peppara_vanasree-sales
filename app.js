@@ -249,23 +249,14 @@ async function refreshPendingCount() {
 
       // IMPORTANT: keep dropdown in sync with live stock
       if (typeof renderSalesDropdown === "function") {
-        // ഡ്രോപ്പ്ഡൗൺ ഉപയോഗിച്ചുകൊണ്ടിരിക്കുമ്പോൾ റിഫ്രഷ് ആകുന്നത് തടയാനുള്ള കോഡ്
-        const activeEl = document.activeElement;
-        const isDropdownOpen = activeEl && activeEl.tagName === "SELECT";
-        
-        if (!isDropdownOpen) {
-          renderSalesDropdown();
-        }
+      const activeEl = document.activeElement;
+      // സെർച്ച് ബോക്സോ ഡ്രോപ്പ്ഡൗണോ ഉപയോഗിക്കുമ്പോൾ റിഫ്രഷ് തടയാനുള്ള കോഡ്
+      const isInteracting = activeEl && (activeEl.id === "salesItemSelect" || activeEl.id === "salesItemSearch");
+      
+      if (!isInteracting) {
+        renderSalesDropdown();
       }
-
-      if (typeof updateSalesStockDetails === "function") {
-        updateSalesStockDetails();
-      }
-    } catch (e) {
-      console.error("Stock refresh error:", e);
     }
-  }
-}
 
 async function getPendingSummary() {
   const ops = await queueGetAll();

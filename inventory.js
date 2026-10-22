@@ -6,34 +6,62 @@
 // =========================
 // Sales Dropdown (hide 0-stock, keep previous selection visible)
 // =========================
-function renderSalesDropdown(preferredSelection = null) {
+function renderSalesDropdown(preferredSelection) {
   const sel = document.getElementById("salesItemSelect");
   if (!sel) return;
 
-  const prevSelected = preferredSelection ?? sel.value;
+  const searchEl = document.getElementById("salesItemSearch");
+  const q = (searchEl?.value || "").trim().toLowerCase();
 
-  sel.innerHTML = "";
+  const prevSelected = (preferredSelection || sel.value || "").trim();
 
-  const names = Object.keys(itemsData || {}).sort((a, b) => a.localeCompare(b));
-  for (const name of names) {
-    const it = itemsData[name];
-    if (!it) continue;
+  const list = Object.values(itemsData || {}).filter((x) => x && x.name);
 
-    // Hide out-of-stock items, but keep previously selected item visible
-    if ((Number(it.stock) || 0) <= 0 && name !== prevSelected) continue;
+  // Sort by name
+  list.sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
-    sel.add(new Option(it.itemName, it.itemName));
+  const options = [];
+  for (const it of list) {
+    const name = String(it.name);
+    const stock = Number(it.stock) || 0;
+
+    const isSelected = prevSelected && name === prevSelected;
+    const matchesQuery = !q || name.toLowerCase().includes(q);
+
+    // Hide 0-stock items, unless it's the selected item
+    if (!isSelected && stock <= 0) continue;
+
+    // Apply search filter, unless it's the selected item
+    if (!isSelected && !matchesQuery) continue;
+
+    const suffix = stock <= 0 ? " (Out of stock)" : ` (Stock: ${stock})`;
+    options.push(`<option value="${name.replace(/"/g, "&quot;")}">${name}${suffix}</option>`);
   }
 
-  // restore selection if still present
-  if (prevSelected && Array.from(sel.options).some((o) => o.value === prevSelected)) {
-    sel.value = prevSelected;
-  } else if (sel.options.length > 0) {
-    sel.selectedIndex = 0;
+  if (!options.length) {
+    sel.innerHTML = `<option value="" disabled selected>No matching items</option>`;
+    if (typeof updateSalesStockDetails === "function") updateSalesStockDetails();
+    return;
   }
+
+  sel.innerHTML = options.join("");
+
+  // Restore previous selection if still present
+  const canRestore = prevSelected && Array.from(sel.options).some((o) => o.value === prevSelected);
+  if (canRestore) sel.value = prevSelected;
+  else sel.selectedIndex = 0;
 
   if (typeof updateSalesStockDetails === "function") updateSalesStockDetails();
 }
+
+(function initSalesItemSearchFilter() {
+  const input = document.getElementById("salesItemSearch");
+  if (!input) return;
+
+  input.addEventListener("input", () => {
+    // Re-render dropdown based on typed query
+    renderSalesDropdown();
+  });
 
 let currentStockModalMode = "purchase"; // "purchase" | "return"
 let itemsListener = null;
