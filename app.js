@@ -247,9 +247,15 @@ async function refreshPendingCount() {
         it.stock = Math.max(0, (it.baseStock || 0) + delta);
       }
 
-      // IMPORTANT: keep dropdown in sync with live stock (hide 0-stock items etc.)
+      // IMPORTANT: keep dropdown in sync with live stock
       if (typeof renderSalesDropdown === "function") {
-        renderSalesDropdown();
+        // ഡ്രോപ്പ്ഡൗൺ ഉപയോഗിച്ചുകൊണ്ടിരിക്കുമ്പോൾ റിഫ്രഷ് ആകുന്നത് തടയാനുള്ള കോഡ്
+        const activeEl = document.activeElement;
+        const isDropdownOpen = activeEl && activeEl.tagName === "SELECT";
+        
+        if (!isDropdownOpen) {
+          renderSalesDropdown();
+        }
       }
 
       if (typeof updateSalesStockDetails === "function") {
