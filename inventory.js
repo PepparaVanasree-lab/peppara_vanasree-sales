@@ -15,14 +15,15 @@ function renderSalesDropdown(preferredSelection) {
 
   const prevSelected = (preferredSelection || sel.value || "").trim();
 
-  const list = Object.values(itemsData || {}).filter((x) => x && x.name);
+  // 'itemName' ഉപയോഗിച്ച് ഡാറ്റ എടുക്കാനുള്ള മാറ്റം
+  const list = Object.values(itemsData || {}).filter((x) => x && x.itemName);
 
-  // Sort by name
-  list.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  // Sort by itemName
+  list.sort((a, b) => String(a.itemName).localeCompare(String(b.itemName)));
 
   const options = [];
   for (const it of list) {
-    const name = String(it.name);
+    const name = String(it.itemName); // ഇവിടെയും itemName എന്ന് മാറ്റി
     const stock = Number(it.stock) || 0;
 
     const isSelected = prevSelected && name === prevSelected;
