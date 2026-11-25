@@ -15,7 +15,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// shared globals (used by other files)
+// Shared globals used by other files
 let itemsData = {};
 const js = (v) => JSON.stringify(v);
 
@@ -24,29 +24,37 @@ let queueDb = null;
 let pendingCount = 0;
 let syncRunning = false;
 
-// Ensure sync does not run before queue init finishes
+// Ensure sync does not run before queue initialization finishes
 let _queueReadyResolve;
-const queueReady = new Promise((resolve) => (_queueReadyResolve = resolve));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const queueReady = new Promise((resolve) => {
+  _queueReadyResolve = resolve;
+});
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // =========================
 // Toast & Button Flash
 // =========================
 let toastTimer = null;
-function showToast(msg, type = "info", ms = 2000) {
-  const t = document.getElementById("toast");
-  if (!t) return;
 
-  t.className = "";
-  t.classList.add(type);
-  t.textContent = msg;
-  t.style.display = "block";
+function showToast(msg, type = "info", ms = 2000) {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+
+  toast.className = "";
+  toast.classList.add(type);
+  toast.textContent = msg;
+  toast.style.display = "block";
 
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.style.display = "none"), ms);
+  toastTimer = setTimeout(() => {
+    toast.style.display = "none";
+  }, ms);
 }
 
-function flashButton(btn, { state = "success", text = "✔ Done!", ms = 1500 } = {}) {
+function flashButton(
+  btn,
+  { state = "success", text = "✔ Done!", ms = 1500 } = {}
+) {
   if (!btn) return;
 
   const originalText = btn.dataset.originalText || btn.innerHTML;
@@ -54,7 +62,13 @@ function flashButton(btn, { state = "success", text = "✔ Done!", ms = 1500 } =
 
   btn.disabled = true;
   btn.classList.remove("btn-saving", "btn-success", "btn-error");
-  btn.classList.add(state === "saving" ? "btn-saving" : state === "error" ? "btn-error" : "btn-success");
+  btn.classList.add(
+    state === "saving"
+      ? "btn-saving"
+      : state === "error"
+        ? "btn-error"
+        : "btn-success"
+  );
   btn.innerHTML = text;
 
   setTimeout(() => {
@@ -89,17 +103,25 @@ function initConnectionMonitor() {
   db.ref(".info/connected").on("value", (snap) => {
     isConnected = snap.val() === true;
     updateNetBadge();
-    if (isConnected) syncPendingOps();
+
+    if (isConnected) {
+      syncPendingOps();
+    }
   });
 
-  window.addEventListener("offline", () => showToast("Offline mode: saved changes will sync later", "info", 2500));
+  window.addEventListener("offline", () => {
+    showToast("Offline mode: saved changes will sync later", "info", 2500);
+  });
+
   window.addEventListener("online", () => {
     showToast("Internet connected: syncing...", "success", 2000);
     syncPendingOps();
   });
 
   setInterval(() => {
-    if (isConnected) syncPendingOps();
+    if (isConnected) {
+      syncPendingOps();
+    }
   }, 15000);
 }
 
@@ -110,9 +132,9 @@ const QUEUE_DB_NAME = "vanasree_pending_db_v1";
 const QUEUE_STORE = "ops";
 const QUEUE_LS_KEY = "vanasree_pending_ops_v1";
 
-function safeJsonParse(s, fallback) {
+function safeJsonParse(value, fallback) {
   try {
-    return JSON.parse(s);
+    return JSON.parse(value);
   } catch {
     return fallback;
   }
@@ -120,16 +142,24 @@ function safeJsonParse(s, fallback) {
 
 function openQueueDb() {
   return new Promise((resolve, reject) => {
-    if (!("indexedDB" in window)) return reject(new Error("IndexedDB not supported"));
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB not supported"));
+      return;
+    }
 
     const req = indexedDB.open(QUEUE_DB_NAME, 1);
+
     req.onupgradeneeded = () => {
       const idb = req.result;
+
       if (!idb.objectStoreNames.contains(QUEUE_STORE)) {
-        const store = idb.createObjectStore(QUEUE_STORE, { keyPath: "opId" });
+        const store = idb.createObjectStore(QUEUE_STORE, {
+          keyPath: "opId"
+        });
         store.createIndex("createdAt", "createdAt", { unique: false });
       }
     };
+
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -141,6 +171,7 @@ async function queueInit() {
   } catch {
     queueDb = null;
   }
+
   _queueReadyResolve?.();
   await refreshPendingCount();
 }
@@ -148,6 +179,7 @@ async function queueInit() {
 function lsReadAllMap() {
   return safeJsonParse(localStorage.getItem(QUEUE_LS_KEY) || "{}", {});
 }
+
 function lsWriteAllMap(map) {
   localStorage.setItem(QUEUE_LS_KEY, JSON.stringify(map));
 }
@@ -183,6 +215,7 @@ async function queueGetAll() {
   const arr = await new Promise((resolve, reject) => {
     const tx = queueDb.transaction(QUEUE_STORE, "readonly");
     const req = tx.objectStore(QUEUE_STORE).getAll();
+
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
   });
@@ -192,11 +225,14 @@ async function queueGetAll() {
 }
 
 async function queueGet(opId) {
-  if (!queueDb) return lsReadAllMap()[opId] || null;
+  if (!queueDb) {
+    return lsReadAllMap()[opId] || null;
+  }
 
   return await new Promise((resolve, reject) => {
     const tx = queueDb.transaction(QUEUE_STORE, "readonly");
     const req = tx.objectStore(QUEUE_STORE).get(opId);
+
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
@@ -222,29 +258,50 @@ async function queueDelete(opId) {
 }
 
 async function queueCount() {
-  if (!queueDb) return Object.keys(lsReadAllMap()).length;
+  if (!queueDb) {
+    return Object.keys(lsReadAllMap()).length;
+  }
 
   return await new Promise((resolve, reject) => {
     const tx = queueDb.transaction(QUEUE_STORE, "readonly");
     const req = tx.objectStore(QUEUE_STORE).count();
+
     req.onsuccess = () => resolve(req.result || 0);
     req.onerror = () => reject(req.error);
   });
 }
 
 // =========================
-// Sales dropdown refresh locking (prevents UI jumping while typing/selecting)
+// Sales Dropdown Refresh Lock
+// Prevents background updates while typing/selecting
 // =========================
 let salesDropdownRefreshDeferred = false;
 let salesDropdownFreezeUntil = 0;
+let salesDropdownRefreshTimer = null;
 
 function markSalesDropdownInteracting(ms = 1500) {
-  salesDropdownFreezeUntil = Math.max(salesDropdownFreezeUntil, Date.now() + ms);
+  salesDropdownFreezeUntil = Math.max(
+    salesDropdownFreezeUntil,
+    Date.now() + ms
+  );
+
+  if (salesDropdownRefreshTimer) {
+    clearTimeout(salesDropdownRefreshTimer);
+    salesDropdownRefreshTimer = null;
+  }
 }
 
 function isSalesDropdownInteracting() {
   const activeEl = document.activeElement;
-  if (activeEl && (activeEl.id === "salesItemSelect" || activeEl.id === "salesItemSearch")) return true;
+
+  if (
+    activeEl &&
+    (activeEl.id === "salesItemSelect" ||
+      activeEl.id === "salesItemSearch")
+  ) {
+    return true;
+  }
+
   return Date.now() < salesDropdownFreezeUntil;
 }
 
@@ -257,15 +314,50 @@ function requestSalesDropdownRefresh() {
   }
 
   salesDropdownRefreshDeferred = false;
+
+  if (salesDropdownRefreshTimer) {
+    clearTimeout(salesDropdownRefreshTimer);
+    salesDropdownRefreshTimer = null;
+  }
+
   renderSalesDropdown();
 }
 
 function flushDeferredSalesDropdownRefresh() {
   if (!salesDropdownRefreshDeferred) return;
   if (typeof renderSalesDropdown !== "function") return;
-  if (isSalesDropdownInteracting()) return;
+
+  const activeEl = document.activeElement;
+  if (
+    activeEl &&
+    (activeEl.id === "salesItemSelect" ||
+      activeEl.id === "salesItemSearch")
+  ) {
+    return;
+  }
+
+  const remainingLockTime = salesDropdownFreezeUntil - Date.now();
+
+  if (remainingLockTime > 0) {
+    if (salesDropdownRefreshTimer) {
+      clearTimeout(salesDropdownRefreshTimer);
+    }
+
+    salesDropdownRefreshTimer = setTimeout(() => {
+      salesDropdownRefreshTimer = null;
+      flushDeferredSalesDropdownRefresh();
+    }, remainingLockTime + 1);
+
+    return;
+  }
 
   salesDropdownRefreshDeferred = false;
+
+  if (salesDropdownRefreshTimer) {
+    clearTimeout(salesDropdownRefreshTimer);
+    salesDropdownRefreshTimer = null;
+  }
+
   renderSalesDropdown();
 }
 
@@ -273,19 +365,18 @@ async function refreshPendingCount() {
   pendingCount = await queueCount();
   updateNetBadge();
 
-  // Recompute live stock from baseStock + remaining pending queue
+  // Recompute live stock from baseStock + remaining pending queue.
   if (itemsData && Object.keys(itemsData).length > 0) {
     try {
       const summary = await getPendingSummary();
 
       for (const name in itemsData) {
-        const it = itemsData[name];
-        const delta = summary.stockDeltaByItemId[it.id] || 0;
-        it.stock = Math.max(0, (it.baseStock || 0) + delta);
+        const item = itemsData[name];
+        const delta = summary.stockDeltaByItemId[item.id] || 0;
+        item.stock = Math.max(0, (item.baseStock || 0) + delta);
       }
 
-      // Keep dropdown in sync with live stock,
-      // but DO NOT refresh it while the user is typing/searching/selecting.
+      // Keep the dropdown current, unless the user is interacting with it.
       requestSalesDropdownRefresh();
 
       if (typeof updateSalesStockDetails === "function") {
@@ -308,26 +399,36 @@ async function getPendingSummary() {
 
   for (const op of ops) {
     if (op.type === "sale") {
-      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
+      stockDeltaByItemId[op.itemId] =
+        (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
 
-      const d = op.saleData && op.saleData.date;
-      if (d) {
-        pendingSalesByDate[d] = pendingSalesByDate[d] || [];
-        pendingSalesByDate[d].push(op);
+      const date = op.saleData && op.saleData.date;
+      if (date) {
+        pendingSalesByDate[date] = pendingSalesByDate[date] || [];
+        pendingSalesByDate[date].push(op);
       }
 
-      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amount || 0);
+      pendingIncomeByDateKey[op.dateKey] =
+        (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amount || 0);
     } else if (op.type === "deleteSale") {
-      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
+      stockDeltaByItemId[op.itemId] =
+        (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
+
       pendingDeleteSaleIds.add(op.saleId);
-      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) - (op.amount || 0);
+      pendingIncomeByDateKey[op.dateKey] =
+        (pendingIncomeByDateKey[op.dateKey] || 0) - (op.amount || 0);
     } else if (op.type === "editSale") {
-      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qtyDiff || 0);
-      pendingIncomeByDateKey[op.dateKey] = (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amtDiff || 0);
+      stockDeltaByItemId[op.itemId] =
+        (stockDeltaByItemId[op.itemId] || 0) - (op.qtyDiff || 0);
+
+      pendingIncomeByDateKey[op.dateKey] =
+        (pendingIncomeByDateKey[op.dateKey] || 0) + (op.amtDiff || 0);
     } else if (op.type === "return") {
-      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
+      stockDeltaByItemId[op.itemId] =
+        (stockDeltaByItemId[op.itemId] || 0) - (op.qty || 0);
     } else if (op.type === "purchase") {
-      stockDeltaByItemId[op.itemId] = (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
+      stockDeltaByItemId[op.itemId] =
+        (stockDeltaByItemId[op.itemId] || 0) + (op.qty || 0);
     } else if (op.type === "remit") {
       pendingRemitByDateKey[op.dateKey] = op.data;
     }
@@ -352,6 +453,7 @@ async function syncPendingOps() {
   if (!isConnected || syncRunning) return;
 
   syncRunning = true;
+
   try {
     const summary = await getPendingSummary();
 
@@ -359,12 +461,19 @@ async function syncPendingOps() {
       if (!isConnected) break;
 
       try {
-        if (op.type === "sale") await syncSaleOp(op);
-        else if (op.type === "deleteSale") await syncDeleteSaleOp(op);
-        else if (op.type === "editSale") await syncEditSaleOp(op);
-        else if (op.type === "remit") await syncRemitOp(op);
-        else if (op.type === "return") await syncReturnOp(op);
-        else if (op.type === "purchase") await syncPurchaseOp(op);
+        if (op.type === "sale") {
+          await syncSaleOp(op);
+        } else if (op.type === "deleteSale") {
+          await syncDeleteSaleOp(op);
+        } else if (op.type === "editSale") {
+          await syncEditSaleOp(op);
+        } else if (op.type === "remit") {
+          await syncRemitOp(op);
+        } else if (op.type === "return") {
+          await syncReturnOp(op);
+        } else if (op.type === "purchase") {
+          await syncPurchaseOp(op);
+        }
       } catch (e) {
         console.error("Sync failed for op:", op, e);
         break;
@@ -377,71 +486,101 @@ async function syncPendingOps() {
   }
 }
 
-// Helper: Recalculate exact DailySales total for a date so Cashbook is never wrong
+// Recalculate exact DailySales total for a date.
 async function recalculateDailyTotal(formattedDate, dateKey) {
   if (!formattedDate || !dateKey) return;
 
-  const snap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
+  const snap = await db
+    .ref("Sales")
+    .orderByChild("date")
+    .equalTo(formattedDate)
+    .once("value");
+
   let sum = 0;
-  snap.forEach((c) => {
-    const v = c.val();
-    if (v && v.amount) sum += Number(v.amount) || 0;
+  snap.forEach((child) => {
+    const value = child.val();
+    if (value && value.amount) {
+      sum += Number(value.amount) || 0;
+    }
   });
+
   await db.ref("DailySales/" + dateKey).set(Number(sum.toFixed(2)));
 }
 
 async function syncSaleOp(op) {
   const exists = await db.ref("Sales/" + op.saleId).once("value");
+
   if (exists.exists()) {
     await queueDelete(op.opId);
     return;
   }
 
-  const formattedDate = op.formattedDate || (op.saleData && op.saleData.date);
+  const formattedDate =
+    op.formattedDate || (op.saleData && op.saleData.date);
 
-  // Find same-date same-item sale on server (merge target)
-  const daySnap = await db.ref("Sales").orderByChild("date").equalTo(formattedDate).once("value");
+  // Find same-date, same-item sale on the server to merge into.
+  const daySnap = await db
+    .ref("Sales")
+    .orderByChild("date")
+    .equalTo(formattedDate)
+    .once("value");
+
   let existingServerSale = null;
   let existingServerSaleId = null;
 
-  daySnap.forEach((c) => {
-    const s = c.val();
-    const sId = (s && s.id) || c.key; // child.key fallback (important for legacy rows)
+  daySnap.forEach((child) => {
+    const sale = child.val();
+    const saleId = (sale && sale.id) || child.key;
 
-    if (s && sId !== op.saleId && (s.itemName || "").trim() === (op.itemName || "").trim()) {
+    if (
+      sale &&
+      saleId !== op.saleId &&
+      (sale.itemName || "").trim() === (op.itemName || "").trim()
+    ) {
       if (!existingServerSale) {
-        existingServerSale = s;
-        existingServerSaleId = sId;
+        existingServerSale = sale;
+        existingServerSaleId = saleId;
       }
     }
   });
 
-  // Guard: do not merge into existingServerSaleId if a pending editSale or deleteSale exists for it
+  // Do not merge into a sale with a pending edit or delete operation.
   if (existingServerSaleId) {
-    const hasPendingEdit = await queueGet("editSale:" + existingServerSaleId);
-    const hasPendingDel = await queueGet("delSale:" + existingServerSaleId);
-    if (hasPendingEdit || hasPendingDel) {
+    const pendingEdit = await queueGet("editSale:" + existingServerSaleId);
+    const pendingDelete = await queueGet("delSale:" + existingServerSaleId);
+
+    if (pendingEdit || pendingDelete) {
       existingServerSale = null;
       existingServerSaleId = null;
     }
   }
 
   const updates = {};
+
   if (existingServerSale && existingServerSaleId) {
-    const mergedQty = (Number(existingServerSale.quantity) || 0) + (Number(op.qty) || 0);
-    const mergedAmt = Number(((Number(existingServerSale.amount) || 0) + (Number(op.amount) || 0)).toFixed(2));
-    updates["Sales/" + existingServerSaleId + "/id"] = existingServerSaleId;
+    const mergedQty =
+      (Number(existingServerSale.quantity) || 0) + (Number(op.qty) || 0);
+    const mergedAmount = Number(
+      (
+        (Number(existingServerSale.amount) || 0) +
+        (Number(op.amount) || 0)
+      ).toFixed(2)
+    );
+
+    updates["Sales/" + existingServerSaleId + "/id"] =
+      existingServerSaleId;
     updates["Sales/" + existingServerSaleId + "/quantity"] = mergedQty;
-    updates["Sales/" + existingServerSaleId + "/amount"] = mergedAmt;
+    updates["Sales/" + existingServerSaleId + "/amount"] = mergedAmount;
   } else {
     updates["Sales/" + op.saleId] = op.saleData;
   }
 
-  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
+  updates["Items/" + op.itemId + "/stock"] =
+    firebase.database.ServerValue.increment(-op.qty);
 
-  // Atomic sync fix:
-  // Delete from queue BEFORE Firebase listener fires; rollback on failure.
+  // Delete from the local queue before Firebase writes. Restore if the write fails.
   await queueDelete(op.opId);
+
   try {
     await db.ref().update(updates);
     await recalculateDailyTotal(formattedDate, op.dateKey);
@@ -453,6 +592,7 @@ async function syncSaleOp(op) {
 
 async function syncDeleteSaleOp(op) {
   const snap = await db.ref("Sales/" + op.saleId).once("value");
+
   if (!snap.exists()) {
     await queueDelete(op.opId);
     return;
@@ -460,14 +600,17 @@ async function syncDeleteSaleOp(op) {
 
   const actualServerSale = snap.val();
   const itemId = actualServerSale.itemId || op.itemId;
-  const actualQtyToRestore = Number(actualServerSale.quantity) || op.qty || 0;
+  const actualQtyToRestore =
+    Number(actualServerSale.quantity) || op.qty || 0;
   const formattedDate = op.formattedDate || actualServerSale.date;
 
   const updates = {};
   updates["Sales/" + op.saleId] = null;
-  updates["Items/" + itemId + "/stock"] = firebase.database.ServerValue.increment(+actualQtyToRestore);
+  updates["Items/" + itemId + "/stock"] =
+    firebase.database.ServerValue.increment(+actualQtyToRestore);
 
   await queueDelete(op.opId);
+
   try {
     await db.ref().update(updates);
     await recalculateDailyTotal(formattedDate, op.dateKey);
@@ -479,6 +622,7 @@ async function syncDeleteSaleOp(op) {
 
 async function syncEditSaleOp(op) {
   const snap = await db.ref("Sales/" + op.saleId).once("value");
+
   if (!snap.exists()) {
     await queueDelete(op.opId);
     return;
@@ -493,9 +637,11 @@ async function syncEditSaleOp(op) {
   const updates = {};
   updates["Sales/" + op.saleId + "/quantity"] = op.newQty;
   updates["Sales/" + op.saleId + "/amount"] = op.newAmt;
-  updates["Items/" + itemId + "/stock"] = firebase.database.ServerValue.increment(-actualQtyDiff);
+  updates["Items/" + itemId + "/stock"] =
+    firebase.database.ServerValue.increment(-actualQtyDiff);
 
   await queueDelete(op.opId);
+
   try {
     await db.ref().update(updates);
     await recalculateDailyTotal(formattedDate, op.dateKey);
@@ -507,6 +653,7 @@ async function syncEditSaleOp(op) {
 
 async function syncRemitOp(op) {
   await queueDelete(op.opId);
+
   try {
     await db.ref("Remittances/" + op.dateKey).set(op.data);
   } catch (err) {
@@ -516,7 +663,10 @@ async function syncRemitOp(op) {
 }
 
 async function syncReturnOp(op) {
-  const exists = await db.ref("Returns/" + op.monthKey + "/" + op.returnId).once("value");
+  const exists = await db
+    .ref("Returns/" + op.monthKey + "/" + op.returnId)
+    .once("value");
+
   if (exists.exists()) {
     await queueDelete(op.opId);
     return;
@@ -524,9 +674,11 @@ async function syncReturnOp(op) {
 
   const updates = {};
   updates["Returns/" + op.monthKey + "/" + op.returnId] = op.data;
-  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(-op.qty);
+  updates["Items/" + op.itemId + "/stock"] =
+    firebase.database.ServerValue.increment(-op.qty);
 
   await queueDelete(op.opId);
+
   try {
     await db.ref().update(updates);
   } catch (err) {
@@ -536,7 +688,10 @@ async function syncReturnOp(op) {
 }
 
 async function syncPurchaseOp(op) {
-  const exists = await db.ref("Purchases/" + op.monthKey + "/" + op.purchaseId).once("value");
+  const exists = await db
+    .ref("Purchases/" + op.monthKey + "/" + op.purchaseId)
+    .once("value");
+
   if (exists.exists()) {
     await queueDelete(op.opId);
     return;
@@ -544,9 +699,11 @@ async function syncPurchaseOp(op) {
 
   const updates = {};
   updates["Purchases/" + op.monthKey + "/" + op.purchaseId] = op.data;
-  updates["Items/" + op.itemId + "/stock"] = firebase.database.ServerValue.increment(+op.qty);
+  updates["Items/" + op.itemId + "/stock"] =
+    firebase.database.ServerValue.increment(+op.qty);
 
   await queueDelete(op.opId);
+
   try {
     await db.ref().update(updates);
   } catch (err) {
@@ -559,8 +716,8 @@ async function syncPurchaseOp(op) {
 // Authentication (Encrypted Hash Only) — Multi-User
 // =========================
 const AUTH_PATH = "AppAuth";
-let authConfig = null; // { users: { [username]: sha256Hash } }
-let currentUser = null; // actively logged-in username
+let authConfig = null;
+let currentUser = null;
 const MASKED_PASS = "********";
 
 const DEFAULT_USERS_PLAINTEXT = {
@@ -572,10 +729,12 @@ async function sha256(text) {
   const data = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+
+  return hashArray
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-// If user edits the password field (or swaps user), stop trusting a remembered hash
 function clearSavedHashOnEdit() {
   const passInput = document.getElementById("password");
   if (!passInput) return;
@@ -586,83 +745,85 @@ function clearSavedHashOnEdit() {
   }
 }
 
-// Build default users -> hashes
 async function buildDefaultUsersHashMap() {
-  const out = {};
-  for (const [u, p] of Object.entries(DEFAULT_USERS_PLAINTEXT)) {
-    out[u] = await sha256(p);
+  const users = {};
+
+  for (const [username, password] of Object.entries(
+    DEFAULT_USERS_PLAINTEXT
+  )) {
+    users[username] = await sha256(password);
   }
-  return out;
+
+  return users;
 }
 
-/**
- * ensureAuthLoaded()
- * - New structure: AppAuth = { users: { "admin": "<hash>", "secretary": "<hash>", ... } }
- * - First load defaults: admin/admin123 + secretary/sec123
- * - Auto-migrate legacy structure: { username, passwordHash } -> { users: { [username]: passwordHash, secretary: <defaultHash>, (admin if missing): <defaultHash> } }
- */
 async function ensureAuthLoaded() {
   if (authConfig) return authConfig;
 
   const snap = await db.ref(AUTH_PATH).once("value");
 
-  // No auth node yet -> create defaults
   if (!snap.exists()) {
-    const defaults = await buildDefaultUsersHashMap();
-    authConfig = { users: defaults };
+    authConfig = {
+      users: await buildDefaultUsersHashMap()
+    };
     await db.ref(AUTH_PATH).set(authConfig);
     return authConfig;
   }
 
   const cfg = snap.val() || {};
 
-  // New multi-user structure exists
+  // Current multi-user structure.
   if (cfg.users && typeof cfg.users === "object") {
-    authConfig = { users: { ...cfg.users } };
+    authConfig = {
+      users: { ...cfg.users }
+    };
 
-    // Ensure default accounts exist (won't overwrite any existing changed passwords)
+    // Add missing default accounts without overwriting existing passwords.
     const defaults = await buildDefaultUsersHashMap();
-    const missing = {};
-    for (const u of Object.keys(defaults)) {
-      if (!authConfig.users[u]) {
-        authConfig.users[u] = defaults[u];
-        missing[u] = defaults[u];
+    const missingUsers = {};
+
+    for (const username of Object.keys(defaults)) {
+      if (!authConfig.users[username]) {
+        authConfig.users[username] = defaults[username];
+        missingUsers[username] = defaults[username];
       }
     }
-    if (Object.keys(missing).length) {
-      await db.ref(AUTH_PATH + "/users").update(missing);
+
+    if (Object.keys(missingUsers).length > 0) {
+      await db.ref(AUTH_PATH + "/users").update(missingUsers);
     }
 
     return authConfig;
   }
 
-  // Legacy single-user structure -> migrate and preserve existing password
+  // Migrate the legacy single-user structure, retaining its password hash.
   if (cfg.username && cfg.passwordHash) {
     const legacyUser = String(cfg.username).trim();
     const legacyHash = String(cfg.passwordHash);
-
     const defaults = await buildDefaultUsersHashMap();
-
     const users = {};
-    if (legacyUser) users[legacyUser] = legacyHash;
 
-    // Append default secretary (requested)
-    if (!users.secretary) users.secretary = defaults.secretary;
+    if (legacyUser) {
+      users[legacyUser] = legacyHash;
+    }
 
-    // Also ensure default admin exists (requested). If legacy user was admin, this does nothing.
-    if (!users.admin) users.admin = defaults.admin;
+    if (!users.secretary) {
+      users.secretary = defaults.secretary;
+    }
+
+    if (!users.admin) {
+      users.admin = defaults.admin;
+    }
 
     authConfig = { users };
-
-    // Replace old structure with new one (removes legacy keys)
     await db.ref(AUTH_PATH).set(authConfig);
-
     return authConfig;
   }
 
-  // Unknown/invalid shape -> reset to defaults
-  const defaults = await buildDefaultUsersHashMap();
-  authConfig = { users: defaults };
+  // Replace an unrecognized structure with the default multi-user structure.
+  authConfig = {
+    users: await buildDefaultUsersHashMap()
+  };
   await db.ref(AUTH_PATH).set(authConfig);
   return authConfig;
 }
@@ -676,6 +837,7 @@ async function changePasswordPrompt() {
 
     const cfg = await ensureAuthLoaded();
     const userHash = cfg.users?.[currentUser];
+
     if (!userHash) {
       showToast("Current user not found in AppAuth", "error");
       return;
@@ -684,14 +846,14 @@ async function changePasswordPrompt() {
     const oldPass = prompt(`Enter OLD password for "${currentUser}":`);
     if (oldPass === null) return;
 
-    const oldHash = await sha256(oldPass);
-    if (oldHash !== userHash) {
+    if ((await sha256(oldPass)) !== userHash) {
       showToast("Old password is wrong!", "error");
       return;
     }
 
     const newPass1 = prompt("Enter NEW password (min 4 chars):");
     if (newPass1 === null) return;
+
     if (newPass1.trim().length < 4) {
       showToast("Password too short!", "error");
       return;
@@ -699,6 +861,7 @@ async function changePasswordPrompt() {
 
     const newPass2 = prompt("Confirm NEW password:");
     if (newPass2 === null) return;
+
     if (newPass1 !== newPass2) {
       showToast("Password not matching!", "error");
       return;
@@ -709,7 +872,7 @@ async function changePasswordPrompt() {
     await db.ref(`${AUTH_PATH}/users/${currentUser}`).set(newHash);
     authConfig.users[currentUser] = newHash;
 
-    // Update remembered hash ONLY if this user is the remembered user
+    // Update remembered credentials only for the active remembered user.
     if (localStorage.getItem("rememberedUser") === currentUser) {
       localStorage.setItem("rememberedHash", newHash);
       localStorage.removeItem("rememberedPass");
@@ -733,59 +896,69 @@ async function handleLogin() {
   try {
     const userEl = document.getElementById("username");
     const passEl = document.getElementById("password");
+    const loginError = document.getElementById("loginError");
 
-    const u = (userEl?.value || "").trim();
-    const p = (passEl?.value || "").trim();
+    const username = (userEl?.value || "").trim();
+    const password = (passEl?.value || "").trim();
     const remember = !!document.getElementById("rememberMe")?.checked;
 
-    document.getElementById("loginError").style.display = "none";
+    if (loginError) {
+      loginError.style.display = "none";
+    }
 
     const cfg = await ensureAuthLoaded();
-    const storedHash = cfg.users?.[u];
+    const storedHash = cfg.users?.[username];
 
-    // If username not found, fail fast
     if (!storedHash) {
-      document.getElementById("loginError").style.display = "block";
+      if (loginError) loginError.style.display = "block";
       return;
     }
 
-    // Only trust savedHash if it was saved for THIS username
     const canUseSavedHash =
-      p === MASKED_PASS &&
+      password === MASKED_PASS &&
       passEl &&
       passEl.dataset.savedHash &&
-      passEl.dataset.savedUser === u;
+      passEl.dataset.savedUser === username;
 
-    const enteredHash = canUseSavedHash ? passEl.dataset.savedHash : await sha256(p);
+    const enteredHash = canUseSavedHash
+      ? passEl.dataset.savedHash
+      : await sha256(password);
 
-    if (enteredHash === storedHash) {
-      currentUser = u;
-      localStorage.removeItem("rememberedPass"); // legacy cleanup
-
-      if (remember) {
-        localStorage.setItem("rememberedUser", u);
-        localStorage.setItem("rememberedHash", enteredHash);
-        if (passEl) {
-          passEl.dataset.savedHash = enteredHash;
-          passEl.dataset.savedUser = u;
-          passEl.value = MASKED_PASS;
-        }
-      } else {
-        localStorage.removeItem("rememberedUser");
-        localStorage.removeItem("rememberedHash");
-        if (passEl) {
-          delete passEl.dataset.savedHash;
-          delete passEl.dataset.savedUser;
-        }
-      }
-
-      document.getElementById("loginSection").style.display = "none";
-      document.getElementById("appSection").style.display = "block";
-      switchTab("salesTab");
-      showToast(`Login successful (${currentUser})`, "success");
-    } else {
-      document.getElementById("loginError").style.display = "block";
+    if (enteredHash !== storedHash) {
+      if (loginError) loginError.style.display = "block";
+      return;
     }
+
+    currentUser = username;
+    localStorage.removeItem("rememberedPass");
+
+    if (remember) {
+      localStorage.setItem("rememberedUser", username);
+      localStorage.setItem("rememberedHash", enteredHash);
+
+      if (passEl) {
+        passEl.dataset.savedHash = enteredHash;
+        passEl.dataset.savedUser = username;
+        passEl.value = MASKED_PASS;
+      }
+    } else {
+      localStorage.removeItem("rememberedUser");
+      localStorage.removeItem("rememberedHash");
+
+      if (passEl) {
+        delete passEl.dataset.savedHash;
+        delete passEl.dataset.savedUser;
+      }
+    }
+
+    const loginSection = document.getElementById("loginSection");
+    const appSection = document.getElementById("appSection");
+
+    if (loginSection) loginSection.style.display = "none";
+    if (appSection) appSection.style.display = "block";
+
+    switchTab("salesTab");
+    showToast(`Login successful (${currentUser})`, "success");
   } catch (e) {
     console.error(e);
     showToast("Login error", "error");
@@ -795,11 +968,13 @@ async function handleLogin() {
 function handleLogout() {
   currentUser = null;
 
-  document.getElementById("appSection").style.display = "none";
-  document.getElementById("loginSection").style.display = "block";
+  const appSection = document.getElementById("appSection");
+  const loginSection = document.getElementById("loginSection");
 
-  // Do NOT clear remembered credentials here; "Remember me" should persist by design.
-  // But do clear any non-remembered typed password for safety/clarity.
+  if (appSection) appSection.style.display = "none";
+  if (loginSection) loginSection.style.display = "block";
+
+  // Keep remembered credentials if Remember me was enabled.
   const passEl = document.getElementById("password");
   if (passEl && !localStorage.getItem("rememberedUser")) {
     passEl.value = "";
@@ -809,32 +984,85 @@ function handleLogout() {
 }
 
 // =========================
-// Navigation
+// Date Helpers & Navigation
 // =========================
+function getLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function setCurrentPeriodFields(monthId, yearId, date = new Date()) {
+  const monthField = document.getElementById(monthId);
+  const yearField = document.getElementById(yearId);
+
+  if (monthField) {
+    monthField.value = String(date.getMonth() + 1).padStart(2, "0");
+  }
+
+  if (yearField) {
+    yearField.value = String(date.getFullYear());
+  }
+}
+
 function switchTab(tabId) {
-  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-  document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
+  if (tabId !== "salesTab" && tabId !== "adminTab") return;
+
+  const tabButtons = document.querySelectorAll(".tabs .tab");
+  const sections = document.querySelectorAll(".section");
+
+  tabButtons.forEach((tab) => tab.classList.remove("active"));
+  sections.forEach((section) => section.classList.remove("active"));
 
   if (tabId === "salesTab") {
-    document.querySelector(".tabs .tab:nth-child(1)").classList.add("active");
-    document.getElementById("salesTab").classList.add("active");
+    tabButtons[0]?.classList.add("active");
+    document.getElementById("salesTab")?.classList.add("active");
     showSalesSubPage("salesMainMenu");
-  } else {
-    document.querySelector(".tabs .tab:nth-child(2)").classList.add("active");
-    document.getElementById("adminTab").classList.add("active");
+    return;
+  }
+
+  tabButtons[1]?.classList.add("active");
+  document.getElementById("adminTab")?.classList.add("active");
+
+  // Set the current period before loading the Cash Book.
+  setCurrentPeriodFields("adminMonth", "adminYear");
+
+  if (typeof loadAdminData === "function") {
     loadAdminData();
   }
 }
 
 function showSalesSubPage(pageId) {
-  document.getElementById("salesMainMenu").style.display = "none";
-  document.querySelectorAll(".sales-subpage").forEach((page) => (page.style.display = "none"));
+  const mainMenu = document.getElementById("salesMainMenu");
+  const targetPage = document.getElementById(pageId);
+
+  if (!mainMenu || !targetPage) return;
+
+  mainMenu.style.display = "none";
+
+  document.querySelectorAll(".sales-subpage").forEach((page) => {
+    page.style.display = "none";
+  });
+
+  targetPage.style.display = "block";
 
   if (pageId === "salesMainMenu") {
-    document.getElementById("salesMainMenu").style.display = "block";
-  } else {
-    document.getElementById(pageId).style.display = "block";
-    if (pageId === "editSalesPage") loadSalesList();
+    mainMenu.style.display = "block";
+  } else if (pageId === "editSalesPage") {
+    if (typeof loadSalesList === "function") {
+      loadSalesList();
+    }
+  } else if (pageId === "genPdfPage") {
+    // Set the PDF month and year each time this section is opened.
+    setCurrentPeriodFields("pdfMonth", "pdfYear");
+
+    // Default the stock report date if the user has not selected one.
+    const stockReportDate = document.getElementById("stockReportDate");
+    if (stockReportDate && !stockReportDate.value) {
+      stockReportDate.value = getLocalDateInputValue();
+    }
   }
 }
 
@@ -842,8 +1070,9 @@ function showSalesSubPage(pageId) {
 // App Startup
 // =========================
 window.addEventListener("load", async () => {
-  // migrate legacy rememberedPass (plain text) -> rememberedHash
+  // Migrate legacy rememberedPass (plain text) to rememberedHash.
   const legacyPlainPass = localStorage.getItem("rememberedPass");
+
   if (legacyPlainPass) {
     const migratedHash = await sha256(legacyPlainPass);
     localStorage.setItem("rememberedHash", migratedHash);
@@ -852,51 +1081,90 @@ window.addEventListener("load", async () => {
 
   const savedUser = localStorage.getItem("rememberedUser");
   const savedHash = localStorage.getItem("rememberedHash");
+
   if (savedUser && savedHash) {
-    document.getElementById("username").value = savedUser;
+    const usernameField = document.getElementById("username");
     const passEl = document.getElementById("password");
-    passEl.value = MASKED_PASS;
-    passEl.dataset.savedHash = savedHash;
-    passEl.dataset.savedUser = savedUser;
-    document.getElementById("rememberMe").checked = true;
+    const rememberMe = document.getElementById("rememberMe");
+
+    if (usernameField) usernameField.value = savedUser;
+
+    if (passEl) {
+      passEl.value = MASKED_PASS;
+      passEl.dataset.savedHash = savedHash;
+      passEl.dataset.savedUser = savedUser;
+    }
+
+    if (rememberMe) rememberMe.checked = true;
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateInputValue();
+
   const saleDate = document.getElementById("saleDate");
   const filterSaleDate = document.getElementById("filterSaleDate");
+  const stockReportDate = document.getElementById("stockReportDate");
+
   if (saleDate) saleDate.value = today;
   if (filterSaleDate) filterSaleDate.value = today;
+  if (stockReportDate && !stockReportDate.value) {
+    stockReportDate.value = today;
+  }
 
-  // Hook interactions so a deferred refresh can run right after user finishes
+  // Initialize displayed periods; navigation updates them again when opened.
+  setCurrentPeriodFields("pdfMonth", "pdfYear");
+  setCurrentPeriodFields("adminMonth", "adminYear");
+
+  // Hook interactions so deferred dropdown refreshes run after the user finishes.
   const searchEl = document.getElementById("salesItemSearch");
   const selectEl = document.getElementById("salesItemSelect");
 
   [searchEl, selectEl].forEach((el) => {
     if (!el) return;
 
-    el.addEventListener("focus", () => markSalesDropdownInteracting(2500));
-    el.addEventListener("pointerdown", () => markSalesDropdownInteracting(2500));
-    el.addEventListener("keydown", () => markSalesDropdownInteracting(2500));
+    el.addEventListener("focus", () => {
+      markSalesDropdownInteracting(2500);
+    });
 
-    // while typing, keep it frozen
-    el.addEventListener("input", () => markSalesDropdownInteracting(2500));
+    el.addEventListener("pointerdown", () => {
+      markSalesDropdownInteracting(2500);
+    });
 
-    // after interaction ends, flush any deferred refresh
-    el.addEventListener("blur", () => setTimeout(flushDeferredSalesDropdownRefresh, 0));
-    el.addEventListener("change", () => setTimeout(flushDeferredSalesDropdownRefresh, 0));
+    el.addEventListener("keydown", () => {
+      markSalesDropdownInteracting(2500);
+    });
+
+    el.addEventListener("input", () => {
+      markSalesDropdownInteracting(2500);
+    });
+
+    el.addEventListener("blur", () => {
+      setTimeout(flushDeferredSalesDropdownRefresh, 0);
+    });
+
+    el.addEventListener("change", () => {
+      setTimeout(flushDeferredSalesDropdownRefresh, 0);
+    });
   });
 
-  // Extra safety: if user taps elsewhere, flush (only if not interacting)
+  // Extra safety: flush deferred refreshes after the user taps elsewhere.
   document.addEventListener(
     "pointerdown",
-    () => setTimeout(flushDeferredSalesDropdownRefresh, 0),
+    () => {
+      setTimeout(flushDeferredSalesDropdownRefresh, 0);
+    },
     true
   );
 
   initConnectionMonitor();
-  queueInit().catch(() => {});
+  queueInit().catch((err) => {
+    console.error("Queue initialization error:", err);
+  });
 
-  ensureAuthLoaded().catch((err) => console.error("Auth error:", err));
+  ensureAuthLoaded().catch((err) => {
+    console.error("Auth error:", err);
+  });
 
-  if (typeof loadItemsFromFirebase === "function") loadItemsFromFirebase();
+  if (typeof loadItemsFromFirebase === "function") {
+    loadItemsFromFirebase();
+  }
 });
